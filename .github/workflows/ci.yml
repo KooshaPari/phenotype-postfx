@@ -1,0 +1,129 @@
+name: Package Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate Unity Package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 1. Validate package.json ─────────────────────────────────────────────
+      - name: Validate package.json (JSON + required fields)
+        run: |
+          set -euo pipefail
+          echo "=== package.json validation ==="
+
+          # Must be valid JSON
+          python3 -c "import json, sys; json.load(open('package.json'))" \
+            && echo "  ✓ Valid JSON" \
+            || { echo "  ✗ package.json is not valid JSON"; exit 1; }
+
+          # Required fields: name, version, unity
+          python3 - <<'PY'
+          import json, sys
+          data = json.load(open("package.json"))
+          required = ["name", "version", "unity"]
+          missing = [f for f in required if not data.get(f)]
+          if missing:
+              print(f"  ✗ Missing required fields: {missing}")
+              sys.exit(1)
+          for f in required:
+              print(f"  ✓ {f} = {data[f]}")
+          PY
+
+      # ── 2. C# syntax sanity checks ───────────────────────────────────────────
+      - name: Check C# files for syntax issues
+        run: |
+          set -euo pipefail
+          echo "=== C# syntax checks ==="
+          ERRORS=0
+
+          for f in $(find . -name "*.cs" -not -path "./.git/*"); do
+            echo "--- $f"
+
+            # Brace balance
+            opens=$(grep -o '{' "$f" | wc -l)
+            closes=$(grep -o '}' "$f" | wc -l)
+            if [ "$opens" -ne "$closes" ]; then
+              echo "  ✗ Mismatched braces: $opens '{' vs $closes '}'"
+              ERRORS=$((ERRORS+1))
+            else
+              echo "  ✓ Braces balanced ($opens)"
+            fi
+
+            # Orphan 'using' directives — a 'using' keyword that is NOT followed
+            # by a namespace/type on the same line (catches a bare 'using;' typo)
+            # Pattern: line that starts with optional whitespace + 'using' + whitespace-only remainder
+            if grep -Pn '^\s*using\s*;' "$f"; then
+              echo "  ✗ Orphan 'using' directive (no namespace/type) found above"
+              ERRORS=$((ERRORS+1))
+            else
+              echo "  ✓ No orphan using directives"
+            fi
+
+            # Every 'using X' outside a namespace block must end with ';'
+            # (catches 'using Foo' with missing semicolon at top of file)
+            bad_using=$(grep -Pn '^\s*using\s+\S[^;{]*$' "$f" | grep -v '//' || true)
+            if [ -n "$bad_using" ]; then
+              echo "  ✗ Possible malformed using directive (missing ';'):"
+              echo "$bad_using"
+              ERRORS=$((ERRORS+1))
+            else
+              echo "  ✓ using directives well-formed"
+            fi
+          done
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo ""
+            echo "C# check failed with $ERRORS error(s)."
+            exit 1
+          fi
+          echo ""
+          echo "All C# checks passed."
+
+      # ── 3. Verify shader files referenced in PostStack.cs exist ─────────────
+      - name: Verify shaders referenced in PostStack.cs exist on disk
+        run: |
+          set -euo pipefail
+          echo "=== Shader file existence check ==="
+
+          # Extract all resource paths passed to TryLoad() or Resources.Load<Shader>()
+          # Matches strings like "Shaders/ScreenSpaceAO" inside the C# source
+          SHADERS=$(grep -oP '"Shaders/[^"]+(?=")' Runtime/PostStack.cs | sort -u)
+
+          if [ -z "$SHADERS" ]; then
+            echo "  No shader resource paths found in PostStack.cs — check pattern."
+            exit 1
+          fi
+
+          ERRORS=0
+          SHADER_ROOT="Runtime"
+
+          for rel_path in $SHADERS; do
+            # Try both with and without .shader extension
+            candidate_plain="$SHADER_ROOT/$rel_path"
+            candidate_ext="$SHADER_ROOT/${rel_path}.shader"
+
+            if [ -f "$candidate_plain" ] || [ -f "$candidate_ext" ]; then
+              echo "  ✓ $rel_path"
+            else
+              echo "  ✗ MISSING: $rel_path  (checked $candidate_plain and $candidate_ext)"
+              ERRORS=$((ERRORS+1))
+            fi
+          done
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo ""
+            echo "Shader check failed: $ERRORS missing file(s)."
+            exit 1
+          fi
+          echo ""
+          echo "All referenced shader files present."
