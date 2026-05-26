@@ -25,6 +25,23 @@ stack.EnableACES = true;
 | `ScreenSpaceAO.shader` | 8-tap rotated kernel SSAO |
 | `ColorGradingLUT.shader` | 32-slice strip LUT lookup |
 
+## Preventing Shader Stripping
+
+Unity's build-time shader stripper removes variants it cannot statically
+prove are reachable. If you ship phenotype-postfx inside an AssetBundle,
+include `Runtime/phenotype-postfx-variants.shadervariants` in your
+AssetBundle build to keep all five post-FX shaders alive:
+
+```
+# In your AssetBundle manifest / addressables group:
+Runtime/phenotype-postfx-variants.shadervariants
+```
+
+Alternatively, reference the SVC from a `PreloadedAssets` entry or from a
+`GraphicsSettings` warmup list. Without it, one or more passes (most often
+`ScreenSpaceGI` and `BrpBloom`) will silently fall back to the error
+magenta shader at runtime.
+
 ## Requirements
 
 - Unity 2021.3+ (Built-In Render Pipeline)
