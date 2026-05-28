@@ -2,6 +2,54 @@ using UnityEngine;
 
 namespace Phenotype.PostFx
 {
+    // ---------------------------------------------------------------------------
+    // Shader-availability abstraction — injectable for tests
+    // ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// Abstracts shader/material availability so tests can inject mock results
+    /// without requiring a live Unity runtime.
+    /// </summary>
+    public interface IShaderAvailabilityProvider
+    {
+        /// <summary>Returns true when the shader for the given effect is loaded
+        /// and all required variants are present in the build.</summary>
+        bool IsAvailable(PostFxEffect effect);
+    }
+
+    /// <summary>Identifies each post-processing effect.</summary>
+    public enum PostFxEffect
+    {
+        SSAO,
+        SSGI,
+        Bloom,
+        ACES,
+        LUT,
+    }
+
+    /// <summary>
+    /// Production implementation: an effect is available when its material was
+    /// successfully loaded (non-null), which is exactly what TryLoad / the LUT
+    /// path guarantee at init time.
+    /// </summary>
+    internal sealed class DefaultShaderAvailabilityProvider : IShaderAvailabilityProvider
+    {
+        readonly PostStack _owner;
+        internal DefaultShaderAvailabilityProvider(PostStack owner) => _owner = owner;
+
+        public bool IsAvailable(PostFxEffect effect) => effect switch
+        {
+            PostFxEffect.SSAO  => _owner._ssaoMat  != null,
+            PostFxEffect.SSGI  => _owner._ssgiMat  != null,
+            PostFxEffect.Bloom => _owner._bloomMat != null,
+            PostFxEffect.ACES  => _owner._acesMat  != null,
+            PostFxEffect.LUT   => _owner._lutMat   != null,
+            _ => false,
+        };
+    }
+
+    // ---------------------------------------------------------------------------
+
     public sealed class PostStack : MonoBehaviour
     {
         static readonly int BloomTexId = Shader.PropertyToID("_BloomTex");
@@ -31,16 +79,45 @@ namespace Phenotype.PostFx
         [Header("LUT")]
         public Texture2D LutTexture;
 
-        Material _ssaoMat;
-        Material _ssgiMat;
-        Material _bloomMat;
-        Material _acesMat;
-        Material _lutMat;
+        // Materials — internal so DefaultShaderAvailabilityProvider can read them
+        internal Material _ssaoMat;
+        internal Material _ssgiMat;
+        internal Material _bloomMat;
+        internal Material _acesMat;
+        internal Material _lutMat;
+
         RenderTexture _ping;
         bool _initialized;
         static readonly Vector4[] _ssaoKernel = new Vector4[16];
         static readonly Vector4[] _ssgiKernel = new Vector4[12];
         static bool _kernelsBuilt;
+
+        // Validated availability flags — set by ValidateShaderVariants()
+        bool _ssaoSupported;
+        bool _ssgiSupported;
+        bool _bloomSupported;
+        bool _acesSupported;
+        bool _lutSupported;
+
+        /// <summary>
+        /// Injectable shader-availability provider.  Defaults to the production
+        /// implementation; replace in tests via <see cref="SetAvailabilityProvider"/>.
+        /// </summary>
+        IShaderAvailabilityProvider _availabilityProvider;
+
+        // ------------------------------------------------------------------
+        // Public API for test injection
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Override the shader-availability provider used by
+        /// <see cref="ValidateShaderVariants"/>.  Call before <c>Awake</c> or
+        /// immediately after construction in tests.
+        /// </summary>
+        public void SetAvailabilityProvider(IShaderAvailabilityProvider provider)
+            => _availabilityProvider = provider ?? throw new System.ArgumentNullException(nameof(provider));
+
+        // ------------------------------------------------------------------
 
         void Awake()
         {
@@ -107,7 +184,44 @@ namespace Phenotype.PostFx
             if (_ssaoMat != null) ApplySSAOParams();
             if (_ssgiMat != null) ApplySSGIParams();
 
+            // Resolve the provider lazily so tests can inject before Awake()
+            _availabilityProvider ??= new DefaultShaderAvailabilityProvider(this);
+            ValidateShaderVariants();
+
             _initialized = true;
+        }
+
+        // ------------------------------------------------------------------
+        // Shader-variant validation
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Audits each enabled effect against the availability provider.
+        /// On failure the effect is silently disabled for this session and a
+        /// <see cref="Debug.LogWarning"/> is emitted — preventing black/pink
+        /// renders in stripped builds.
+        /// </summary>
+        internal void ValidateShaderVariants()
+        {
+            _ssaoSupported  = CheckEffect(PostFxEffect.SSAO,  "ScreenSpaceAO",  nameof(EnableSSAO));
+            _ssgiSupported  = CheckEffect(PostFxEffect.SSGI,  "ScreenSpaceGI",  nameof(EnableSSGI));
+            _bloomSupported = CheckEffect(PostFxEffect.Bloom, "BrpBloom",       nameof(EnableBloom));
+            _acesSupported  = CheckEffect(PostFxEffect.ACES,  "BrpACES",        nameof(EnableACES));
+            _lutSupported   = CheckEffect(PostFxEffect.LUT,   "ColorGradingLUT",nameof(EnableLUT));
+        }
+
+        bool CheckEffect(PostFxEffect effect, string shaderName, string toggleName)
+        {
+            bool available = _availabilityProvider.IsAvailable(effect);
+            if (!available)
+            {
+                Debug.LogWarning(
+                    $"[PostStack] Shader variant unavailable: {shaderName}. " +
+                    $"{toggleName} will be skipped this session. " +
+                    $"Ensure the shader is included in your build's ShaderVariantCollection " +
+                    $"(phenotype-postfx-variants.shadervariants).");
+            }
+            return available;
         }
 
         void ReleaseMaterials()
@@ -164,9 +278,11 @@ namespace Phenotype.PostFx
                 return;
             }
 
-            bool anyPass = (EnableSSAO && _ssaoMat) || (EnableSSGI && _ssgiMat) ||
-                           (EnableBloom && _bloomMat) || (EnableACES && _acesMat) ||
-                           (EnableLUT && _lutMat);
+            bool anyPass = (EnableSSAO && _ssaoSupported && _ssaoMat) ||
+                           (EnableSSGI && _ssgiSupported && _ssgiMat) ||
+                           (EnableBloom && _bloomSupported && _bloomMat) ||
+                           (EnableACES && _acesSupported && _acesMat) ||
+                           (EnableLUT && _lutSupported && _lutMat);
             if (!anyPass)
             {
                 Graphics.Blit(src, dst);
@@ -178,21 +294,21 @@ namespace Phenotype.PostFx
             {
                 RenderTexture cur = src, next = _ping;
 
-                if (EnableSSAO && _ssaoMat)
+                if (EnableSSAO && _ssaoSupported && _ssaoMat)
                 {
                     ApplySSAOParams();
                     Graphics.Blit(cur, next, _ssaoMat);
                     Swap(ref cur, ref next);
                 }
 
-                if (EnableSSGI && _ssgiMat)
+                if (EnableSSGI && _ssgiSupported && _ssgiMat)
                 {
                     ApplySSGIParams();
                     Graphics.Blit(cur, next, _ssgiMat);
                     Swap(ref cur, ref next);
                 }
 
-                if (EnableBloom && _bloomMat)
+                if (EnableBloom && _bloomSupported && _bloomMat)
                 {
                     int w = Mathf.Max(1, src.width / 4);
                     int h = Mathf.Max(1, src.height / 4);
@@ -215,14 +331,14 @@ namespace Phenotype.PostFx
                     }
                 }
 
-                if (EnableACES && _acesMat)
+                if (EnableACES && _acesSupported && _acesMat)
                 {
                     _acesMat.SetFloat(ExposureId, Exposure);
                     Graphics.Blit(cur, next, _acesMat);
                     Swap(ref cur, ref next);
                 }
 
-                if (EnableLUT && _lutMat && LutTexture)
+                if (EnableLUT && _lutSupported && _lutMat && LutTexture)
                     Graphics.Blit(cur, dst, _lutMat);
                 else
                     Graphics.Blit(cur, dst);
