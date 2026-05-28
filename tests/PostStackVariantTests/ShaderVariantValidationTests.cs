@@ -261,9 +261,8 @@ namespace PostStackVariantTests
             // Call again
             stack.ValidateShaderVariants();
 
-            // Warnings doubled (each call warns independently — that is the
-            // expected behaviour: each re-init re-audits)
-            Assert.Equal(countAfterFirst * 2, DebugCapture.Warnings.Count);
+            // Should not emit duplicate warnings (idempotent behavior)
+            Assert.Equal(countAfterFirst, DebugCapture.Warnings.Count);
         }
     }
 }
