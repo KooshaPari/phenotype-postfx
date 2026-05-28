@@ -8,6 +8,18 @@ static class Program
         @"void\s+EnsurePingPong\s*\(\s*RenderTexture\s+src\s*\)",
         @"void\s+InitMaterials\s*\(\s*\)",
         @"void\s+ReleaseMaterials\s*\(\s*\)",
+        // Shader-variant validation additions
+        @"interface\s+IShaderAvailabilityProvider",
+        @"bool\s+IsAvailable\s*\(\s*PostFxEffect\s+effect\s*\)",
+        @"void\s+SetAvailabilityProvider\s*\(\s*IShaderAvailabilityProvider\s+provider\s*\)",
+        @"internal\s+void\s+ValidateShaderVariants\s*\(\s*\)",
+        @"bool\s+CheckEffect\s*\(",
+        // Each effect enable path now requires support flag
+        @"EnableSSAO\s*&&\s*_ssaoSupported",
+        @"EnableSSGI\s*&&\s*_ssgiSupported",
+        @"EnableBloom\s*&&\s*_bloomSupported",
+        @"EnableACES\s*&&\s*_acesSupported",
+        @"EnableLUT\s*&&\s*_lutSupported",
     ];
 
     public static int Main()

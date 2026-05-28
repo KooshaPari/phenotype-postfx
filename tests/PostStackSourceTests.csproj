@@ -7,4 +7,9 @@
     <AssemblyName>PostStackSourceTests</AssemblyName>
     <RootNamespace>PostStackSourceTests</RootNamespace>
   </PropertyGroup>
+
+  <!-- Exclude the xUnit sub-project; it has its own .csproj and references -->
+  <ItemGroup>
+    <Compile Remove="PostStackVariantTests/**" />
+  </ItemGroup>
 </Project>
