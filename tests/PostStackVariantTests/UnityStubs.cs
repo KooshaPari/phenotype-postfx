@@ -32,6 +32,23 @@ namespace UnityEngine
             => (_warnings ??= new List<string>()).Clear();
     }
 
+    public static class GraphicsCapture
+    {
+        public sealed record BlitCall(RenderTexture? Src, RenderTexture? Dst, Material? Material, int? Pass);
+
+        [ThreadStatic]
+        private static List<BlitCall>? _blits;
+
+        public static IReadOnlyList<BlitCall> Blits
+            => _blits ??= new List<BlitCall>();
+
+        internal static void Add(RenderTexture src, RenderTexture dst, Material? material, int? pass)
+            => (_blits ??= new List<BlitCall>()).Add(new BlitCall(src, dst, material, pass));
+
+        public static void Clear()
+            => (_blits ??= new List<BlitCall>()).Clear();
+    }
+
     // -----------------------------------------------------------------------
     // UnityEngine types
     // -----------------------------------------------------------------------
@@ -148,9 +165,12 @@ namespace UnityEngine
 
     public static class Graphics
     {
-        public static void Blit(RenderTexture src, RenderTexture dst) { }
-        public static void Blit(RenderTexture src, RenderTexture dst, Material mat) { }
-        public static void Blit(RenderTexture src, RenderTexture dst, Material mat, int pass) { }
+        public static void Blit(RenderTexture src, RenderTexture dst)
+            => GraphicsCapture.Add(src, dst, null, null);
+        public static void Blit(RenderTexture src, RenderTexture dst, Material mat)
+            => GraphicsCapture.Add(src, dst, mat, null);
+        public static void Blit(RenderTexture src, RenderTexture dst, Material mat, int pass)
+            => GraphicsCapture.Add(src, dst, mat, pass);
     }
 
     public static class Mathf

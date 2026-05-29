@@ -8,6 +8,7 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Phenotype.PostFx;
 using UnityEngine;
 using Xunit;
@@ -91,6 +92,30 @@ namespace PostStackVariantTests
         }
     }
 
+    /// <summary>
+    /// Reflection helper for exercising private render-path details without
+    /// changing the public API.
+    /// </summary>
+    static class PostStackRuntimeReflection
+    {
+        static FieldInfo Field(string name) =>
+            typeof(PostStack).GetField(name,
+                BindingFlags.NonPublic |
+                BindingFlags.Instance)
+            ?? throw new MissingFieldException(typeof(PostStack).FullName, name);
+
+        public static void Set<T>(PostStack stack, string fieldName, T value)
+            => Field(fieldName).SetValue(stack, value);
+
+        public static void InvokeOnRenderImage(PostStack stack, RenderTexture src, RenderTexture dst)
+        {
+            var method = typeof(PostStack).GetMethod("OnRenderImage", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?? throw new MissingMethodException(typeof(PostStack).FullName, "OnRenderImage");
+
+            method.Invoke(stack, new object?[] { src, dst });
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Tests
     // -------------------------------------------------------------------------
@@ -99,7 +124,10 @@ namespace PostStackVariantTests
     {
         // Before each test, clear the captured warning list.
         public ShaderVariantValidationTests()
-            => DebugCapture.Clear();
+        {
+            DebugCapture.Clear();
+            GraphicsCapture.Clear();
+        }
 
         // ------------------------------------------------------------------
         // Scenario 1: all supported — no warnings
@@ -291,6 +319,44 @@ namespace PostStackVariantTests
             Assert.NotNull(field);
             Assert.Equal(typeof(bool), field!.FieldType);
             Assert.Contains("ChromaticAberration", System.Enum.GetNames(typeof(PostFxEffect)));
+        }
+
+        [Fact]
+        public void SharedBlitHelper_EnabledAndSupported_EmitsMaterialBlit()
+        {
+            var stack = (PostStack)Activator.CreateInstance(typeof(PostStack))!;
+            var material = new Material(new Shader());
+            var src = new RenderTexture { width = 64, height = 64 };
+            var dst = new RenderTexture { width = 64, height = 64 };
+
+            stack.EnableACES = true;
+            PostStackRuntimeReflection.Set(stack, "_initialized", true);
+            PostStackRuntimeReflection.Set(stack, "_acesSupported", true);
+            PostStackRuntimeReflection.Set(stack, "_acesMat", material);
+
+            GraphicsCapture.Clear();
+            PostStackRuntimeReflection.InvokeOnRenderImage(stack, src, dst);
+
+            Assert.Contains(GraphicsCapture.Blits, call => call.Material == material);
+        }
+
+        [Fact]
+        public void SharedBlitHelper_Unsupported_SkipsMaterialBlit()
+        {
+            var stack = (PostStack)Activator.CreateInstance(typeof(PostStack))!;
+            var material = new Material(new Shader());
+            var src = new RenderTexture { width = 64, height = 64 };
+            var dst = new RenderTexture { width = 64, height = 64 };
+
+            stack.EnableACES = true;
+            PostStackRuntimeReflection.Set(stack, "_initialized", true);
+            PostStackRuntimeReflection.Set(stack, "_acesSupported", false);
+            PostStackRuntimeReflection.Set(stack, "_acesMat", material);
+
+            GraphicsCapture.Clear();
+            PostStackRuntimeReflection.InvokeOnRenderImage(stack, src, dst);
+
+            Assert.DoesNotContain(GraphicsCapture.Blits, call => call.Material == material);
         }
 
         // ------------------------------------------------------------------
