@@ -56,6 +56,11 @@ namespace UnityEngine
         public float x, y;
         public static readonly Vector2 right = new Vector2 { x = 1 };
         public static readonly Vector2 one = new Vector2 { x = 1, y = 1 };
+        public Vector2(float x, float y)
+        {
+            this.x = x;
+            this.y = y;
+        }
         public float sqrMagnitude => x * x + y * y;
         public void Normalize()
         {
