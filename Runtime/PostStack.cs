@@ -30,6 +30,27 @@ namespace Phenotype.PostFx
     }
 
     /// <summary>
+    /// Shared per-pass metadata used by the render pipeline.
+    /// </summary>
+    internal readonly struct PostFxPass
+    {
+        public readonly string ShaderName;
+        public readonly Material? Material;
+        public readonly bool Enabled;
+        public readonly bool Supported;
+
+        public PostFxPass(string shaderName, Material? material, bool enabled, bool supported)
+        {
+            ShaderName = shaderName;
+            Material = material;
+            Enabled = enabled;
+            Supported = supported;
+        }
+
+        public bool IsActive => Enabled && Supported && Material;
+    }
+
+    /// <summary>
     /// Production implementation: an effect is available when its material was
     /// successfully loaded (non-null), which is exactly what TryLoad / the LUT
     /// path guarantee at init time.
@@ -181,12 +202,12 @@ namespace Phenotype.PostFx
         void InitMaterials()
         {
             ReleaseMaterials();
-            _ssaoMat = TryLoad("Shaders/ScreenSpaceAO", "Hidden/ScreenSpaceAO");
-            _ssgiMat = TryLoad("Shaders/ScreenSpaceGI", "Hidden/ScreenSpaceGI");
-            _bloomMat = TryLoad("Shaders/BrpBloom", "Hidden/Phenotype/BrpBloom");
-            _acesMat = TryLoad("Shaders/BrpACES", "Hidden/Phenotype/BrpACES");
-            _vignetteMat = TryLoad("Shaders/Vignette", "Hidden/WSM3D/Vignette");
-            _chromaticAberrationMat = TryLoad("Shaders/ChromaticAberration", "Hidden/WSM3D/ChromaticAberration");
+            _ssaoMat = TryLoadPass("Shaders/ScreenSpaceAO", "Hidden/ScreenSpaceAO");
+            _ssgiMat = TryLoadPass("Shaders/ScreenSpaceGI", "Hidden/ScreenSpaceGI");
+            _bloomMat = TryLoadPass("Shaders/BrpBloom", "Hidden/Phenotype/BrpBloom");
+            _acesMat = TryLoadPass("Shaders/BrpACES", "Hidden/Phenotype/BrpACES");
+            _vignetteMat = TryLoadPass("Shaders/Vignette", "Hidden/WSM3D/Vignette");
+            _chromaticAberrationMat = TryLoadPass("Shaders/ChromaticAberration", "Hidden/WSM3D/ChromaticAberration");
 
             Shader lutShader = Resources.Load<Shader>("Shaders/ColorGradingLUT");
             lutShader ??= Shader.Find("Hidden/ColorGradingLUT");
@@ -224,16 +245,16 @@ namespace Phenotype.PostFx
         /// </summary>
         internal void ValidateShaderVariants()
         {
-            _ssaoSupported  = CheckEffect(PostFxEffect.SSAO,  "ScreenSpaceAO",  nameof(EnableSSAO));
-            _ssgiSupported  = CheckEffect(PostFxEffect.SSGI,  "ScreenSpaceGI",  nameof(EnableSSGI));
-            _bloomSupported = CheckEffect(PostFxEffect.Bloom, "BrpBloom",       nameof(EnableBloom));
-            _acesSupported  = CheckEffect(PostFxEffect.ACES,  "BrpACES",        nameof(EnableACES));
-            _vignetteSupported = CheckEffect(PostFxEffect.Vignette, "Vignette", nameof(EnableVignette));
-            _chromaticAberrationSupported = CheckEffect(PostFxEffect.ChromaticAberration, "ChromaticAberration", nameof(EnableChromaticAberration));
-            _lutSupported   = CheckEffect(PostFxEffect.LUT,   "ColorGradingLUT",nameof(EnableLUT));
+            _ssaoSupported  = ValidatePass(PostFxEffect.SSAO,  "ScreenSpaceAO",  nameof(EnableSSAO));
+            _ssgiSupported  = ValidatePass(PostFxEffect.SSGI,  "ScreenSpaceGI",  nameof(EnableSSGI));
+            _bloomSupported = ValidatePass(PostFxEffect.Bloom, "BrpBloom",       nameof(EnableBloom));
+            _acesSupported  = ValidatePass(PostFxEffect.ACES,  "BrpACES",        nameof(EnableACES));
+            _vignetteSupported = ValidatePass(PostFxEffect.Vignette, "Vignette", nameof(EnableVignette));
+            _chromaticAberrationSupported = ValidatePass(PostFxEffect.ChromaticAberration, "ChromaticAberration", nameof(EnableChromaticAberration));
+            _lutSupported   = ValidatePass(PostFxEffect.LUT,   "ColorGradingLUT",nameof(EnableLUT));
         }
 
-        bool CheckEffect(PostFxEffect effect, string shaderName, string toggleName)
+        bool ValidatePass(PostFxEffect effect, string shaderName, string toggleName)
         {
             bool available = _availabilityProvider.IsAvailable(effect);
             if (!available)
@@ -258,7 +279,7 @@ namespace Phenotype.PostFx
             if (_lutMat != null) { Destroy(_lutMat); _lutMat = null; }
         }
 
-        static Material TryLoad(string resourcePath, string fallbackName)
+        static Material? TryLoadPass(string resourcePath, string fallbackName)
         {
             Shader shader = Resources.Load<Shader>(resourcePath);
             shader ??= Shader.Find(fallbackName);
@@ -280,6 +301,11 @@ namespace Phenotype.PostFx
             _ssgiMat.SetVectorArray("_Samples", _ssgiKernel);
             _ssgiMat.SetFloat("_Radius", SSGIRadius);
             _ssgiMat.SetFloat("_Intensity", SSGIIntensity);
+        }
+
+        void ApplyACESParams()
+        {
+            _acesMat.SetFloat(ExposureId, Exposure);
         }
 
         void ApplyVignetteParams()
@@ -307,6 +333,14 @@ namespace Phenotype.PostFx
             if (_ping != null) { RenderTexture.ReleaseTemporary(_ping); _ping = null; }
         }
 
+        static bool BlitIfEnabled(RenderTexture src, RenderTexture dst, in PostFxPass pass, System.Action? beforeBlit = null)
+        {
+            if (!pass.IsActive) return false;
+            beforeBlit?.Invoke();
+            Graphics.Blit(src, dst, pass.Material!);
+            return true;
+        }
+
         void OnRenderImage(RenderTexture src, RenderTexture dst)
         {
             if (src == null || dst == null) return;
@@ -316,13 +350,21 @@ namespace Phenotype.PostFx
                 return;
             }
 
-            bool anyPass = (EnableSSAO && _ssaoSupported && _ssaoMat) ||
-                           (EnableSSGI && _ssgiSupported && _ssgiMat) ||
-                           (EnableBloom && _bloomSupported && _bloomMat) ||
-                           (EnableACES && _acesSupported && _acesMat) ||
-                           (EnableVignette && _vignetteSupported && _vignetteMat) ||
-                           (EnableChromaticAberration && _chromaticAberrationSupported && _chromaticAberrationMat) ||
-                           (EnableLUT && _lutSupported && _lutMat);
+            PostFxPass ssaoPass = new PostFxPass("ScreenSpaceAO", _ssaoMat, EnableSSAO, _ssaoSupported);
+            PostFxPass ssgiPass = new PostFxPass("ScreenSpaceGI", _ssgiMat, EnableSSGI, _ssgiSupported);
+            PostFxPass bloomPass = new PostFxPass("BrpBloom", _bloomMat, EnableBloom, _bloomSupported);
+            PostFxPass acesPass = new PostFxPass("BrpACES", _acesMat, EnableACES, _acesSupported);
+            PostFxPass vignettePass = new PostFxPass("Vignette", _vignetteMat, EnableVignette, _vignetteSupported);
+            PostFxPass chromaticAberrationPass = new PostFxPass("ChromaticAberration", _chromaticAberrationMat, EnableChromaticAberration, _chromaticAberrationSupported);
+            PostFxPass lutPass = new PostFxPass("ColorGradingLUT", _lutMat, EnableLUT, _lutSupported);
+
+            bool anyPass = ssaoPass.IsActive ||
+                           ssgiPass.IsActive ||
+                           bloomPass.IsActive ||
+                           acesPass.IsActive ||
+                           vignettePass.IsActive ||
+                           chromaticAberrationPass.IsActive ||
+                           (lutPass.IsActive && LutTexture);
             if (!anyPass)
             {
                 Graphics.Blit(src, dst);
@@ -334,21 +376,17 @@ namespace Phenotype.PostFx
             {
                 RenderTexture cur = src, next = _ping;
 
-                if (EnableSSAO && _ssaoSupported && _ssaoMat)
+                if (BlitIfEnabled(cur, next, ssaoPass, ApplySSAOParams))
                 {
-                    ApplySSAOParams();
-                    Graphics.Blit(cur, next, _ssaoMat);
                     Swap(ref cur, ref next);
                 }
 
-                if (EnableSSGI && _ssgiSupported && _ssgiMat)
+                if (BlitIfEnabled(cur, next, ssgiPass, ApplySSGIParams))
                 {
-                    ApplySSGIParams();
-                    Graphics.Blit(cur, next, _ssgiMat);
                     Swap(ref cur, ref next);
                 }
 
-                if (EnableBloom && _bloomSupported && _bloomMat)
+                if (bloomPass.IsActive)
                 {
                     int w = Mathf.Max(1, src.width / 4);
                     int h = Mathf.Max(1, src.height / 4);
@@ -371,29 +409,23 @@ namespace Phenotype.PostFx
                     }
                 }
 
-                if (EnableACES && _acesSupported && _acesMat)
+                if (BlitIfEnabled(cur, next, acesPass, ApplyACESParams))
                 {
-                    _acesMat.SetFloat(ExposureId, Exposure);
-                    Graphics.Blit(cur, next, _acesMat);
                     Swap(ref cur, ref next);
                 }
 
-                if (EnableVignette && _vignetteSupported && _vignetteMat)
+                if (BlitIfEnabled(cur, next, vignettePass, ApplyVignetteParams))
                 {
-                    ApplyVignetteParams();
-                    Graphics.Blit(cur, next, _vignetteMat);
                     Swap(ref cur, ref next);
                 }
 
-                if (EnableChromaticAberration && _chromaticAberrationSupported && _chromaticAberrationMat)
+                if (BlitIfEnabled(cur, next, chromaticAberrationPass, ApplyChromaticAberrationParams))
                 {
-                    ApplyChromaticAberrationParams();
-                    Graphics.Blit(cur, next, _chromaticAberrationMat);
                     Swap(ref cur, ref next);
                 }
 
-                if (EnableLUT && _lutSupported && _lutMat && LutTexture)
-                    Graphics.Blit(cur, dst, _lutMat);
+                if (lutPass.IsActive && LutTexture)
+                    Graphics.Blit(cur, dst, lutPass.Material!);
                 else
                     Graphics.Blit(cur, dst);
             }
