@@ -37,6 +37,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.Bloom] = true,
                 [PostFxEffect.ACES]  = true,
                 [PostFxEffect.Vignette] = true,
+                [PostFxEffect.ChromaticAberration] = true,
                 [PostFxEffect.LUT]   = true,
             });
 
@@ -49,6 +50,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.Bloom] = false,
                 [PostFxEffect.ACES]  = false,
                 [PostFxEffect.Vignette] = false,
+                [PostFxEffect.ChromaticAberration] = false,
                 [PostFxEffect.LUT]   = false,
             });
 
@@ -121,6 +123,7 @@ namespace PostStackVariantTests
             Assert.True(PostStackReflection.GetBool(stack, "_bloomSupported"), "_bloomSupported");
             Assert.True(PostStackReflection.GetBool(stack, "_acesSupported"),  "_acesSupported");
             Assert.True(PostStackReflection.GetBool(stack, "_vignetteSupported"), "_vignetteSupported");
+            Assert.True(PostStackReflection.GetBool(stack, "_chromaticAberrationSupported"), "_chromaticAberrationSupported");
             Assert.True(PostStackReflection.GetBool(stack, "_lutSupported"),   "_lutSupported");
         }
 
@@ -133,8 +136,8 @@ namespace PostStackVariantTests
         {
             var stack = PostStackFactory.Create(MockAvailabilityProvider.NoneAvailable());
 
-            // One warning per effect (6 total)
-            Assert.Equal(6, DebugCapture.Warnings.Count);
+            // One warning per effect (7 total)
+            Assert.Equal(7, DebugCapture.Warnings.Count);
         }
 
         [Theory]
@@ -143,6 +146,7 @@ namespace PostStackVariantTests
         [InlineData(PostFxEffect.Bloom, "BrpBloom")]
         [InlineData(PostFxEffect.ACES,  "BrpACES")]
         [InlineData(PostFxEffect.Vignette, "Vignette")]
+        [InlineData(PostFxEffect.ChromaticAberration, "ChromaticAberration")]
         [InlineData(PostFxEffect.LUT,   "ColorGradingLUT")]
         public void MissingVariant_WarningContainsShaderName(PostFxEffect effect, string shaderName)
         {
@@ -154,6 +158,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.Bloom] = true,
                 [PostFxEffect.ACES]  = true,
                 [PostFxEffect.Vignette] = true,
+                [PostFxEffect.ChromaticAberration] = true,
                 [PostFxEffect.LUT]   = true,
             };
             map[effect] = false;
@@ -184,6 +189,7 @@ namespace PostStackVariantTests
         [InlineData(PostFxEffect.Bloom, "_bloomSupported")]
         [InlineData(PostFxEffect.ACES,  "_acesSupported")]
         [InlineData(PostFxEffect.Vignette, "_vignetteSupported")]
+        [InlineData(PostFxEffect.ChromaticAberration, "_chromaticAberrationSupported")]
         [InlineData(PostFxEffect.LUT,   "_lutSupported")]
         public void GracefulSkip_UnavailableEffect_FlagSetFalse(PostFxEffect effect, string flagField)
         {
@@ -194,6 +200,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.Bloom] = true,
                 [PostFxEffect.ACES]  = true,
                 [PostFxEffect.Vignette] = true,
+                [PostFxEffect.ChromaticAberration] = true,
                 [PostFxEffect.LUT]   = true,
             };
             map[effect] = false;
@@ -209,6 +216,7 @@ namespace PostStackVariantTests
         [InlineData(PostFxEffect.SSGI)]
         [InlineData(PostFxEffect.Bloom)]
         [InlineData(PostFxEffect.ACES)]
+        [InlineData(PostFxEffect.ChromaticAberration)]
         [InlineData(PostFxEffect.LUT)]
         public void GracefulSkip_OtherEffectsUnaffected(PostFxEffect unavailableEffect)
         {
@@ -219,6 +227,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.Bloom] = true,
                 [PostFxEffect.ACES]  = true,
                 [PostFxEffect.Vignette] = true,
+                [PostFxEffect.ChromaticAberration] = true,
                 [PostFxEffect.LUT]   = true,
             };
             map[unavailableEffect] = false;
@@ -233,6 +242,7 @@ namespace PostStackVariantTests
                 (PostFxEffect.Bloom, "_bloomSupported"),
                 (PostFxEffect.ACES,  "_acesSupported"),
                 (PostFxEffect.Vignette, "_vignetteSupported"),
+                (PostFxEffect.ChromaticAberration, "_chromaticAberrationSupported"),
                 (PostFxEffect.LUT,   "_lutSupported"),
             };
             foreach (var (e, flag) in allFlags)
@@ -253,6 +263,7 @@ namespace PostStackVariantTests
             Assert.False(PostStackReflection.GetBool(stack, "_bloomSupported"), "_bloomSupported");
             Assert.False(PostStackReflection.GetBool(stack, "_acesSupported"),  "_acesSupported");
             Assert.False(PostStackReflection.GetBool(stack, "_vignetteSupported"), "_vignetteSupported");
+            Assert.False(PostStackReflection.GetBool(stack, "_chromaticAberrationSupported"), "_chromaticAberrationSupported");
             Assert.False(PostStackReflection.GetBool(stack, "_lutSupported"),   "_lutSupported");
         }
 
@@ -267,6 +278,19 @@ namespace PostStackVariantTests
             Assert.NotNull(field);
             Assert.Equal(typeof(bool), field!.FieldType);
             Assert.Contains("Vignette", System.Enum.GetNames(typeof(PostFxEffect)));
+        }
+
+        [Fact]
+        public void SourceSurface_ExposesChromaticAberrationFieldAndEnumMember()
+        {
+            var field = typeof(PostStack).GetField(
+                "EnableChromaticAberration",
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Instance);
+
+            Assert.NotNull(field);
+            Assert.Equal(typeof(bool), field!.FieldType);
+            Assert.Contains("ChromaticAberration", System.Enum.GetNames(typeof(PostFxEffect)));
         }
 
         // ------------------------------------------------------------------
