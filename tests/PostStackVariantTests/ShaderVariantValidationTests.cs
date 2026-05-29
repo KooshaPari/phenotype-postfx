@@ -36,6 +36,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.SSGI]  = true,
                 [PostFxEffect.Bloom] = true,
                 [PostFxEffect.ACES]  = true,
+                [PostFxEffect.Vignette] = true,
                 [PostFxEffect.LUT]   = true,
             });
 
@@ -47,6 +48,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.SSGI]  = false,
                 [PostFxEffect.Bloom] = false,
                 [PostFxEffect.ACES]  = false,
+                [PostFxEffect.Vignette] = false,
                 [PostFxEffect.LUT]   = false,
             });
 
@@ -118,6 +120,7 @@ namespace PostStackVariantTests
             Assert.True(PostStackReflection.GetBool(stack, "_ssgiSupported"),  "_ssgiSupported");
             Assert.True(PostStackReflection.GetBool(stack, "_bloomSupported"), "_bloomSupported");
             Assert.True(PostStackReflection.GetBool(stack, "_acesSupported"),  "_acesSupported");
+            Assert.True(PostStackReflection.GetBool(stack, "_vignetteSupported"), "_vignetteSupported");
             Assert.True(PostStackReflection.GetBool(stack, "_lutSupported"),   "_lutSupported");
         }
 
@@ -130,8 +133,8 @@ namespace PostStackVariantTests
         {
             var stack = PostStackFactory.Create(MockAvailabilityProvider.NoneAvailable());
 
-            // One warning per effect (5 total)
-            Assert.Equal(5, DebugCapture.Warnings.Count);
+            // One warning per effect (6 total)
+            Assert.Equal(6, DebugCapture.Warnings.Count);
         }
 
         [Theory]
@@ -139,6 +142,7 @@ namespace PostStackVariantTests
         [InlineData(PostFxEffect.SSGI,  "ScreenSpaceGI")]
         [InlineData(PostFxEffect.Bloom, "BrpBloom")]
         [InlineData(PostFxEffect.ACES,  "BrpACES")]
+        [InlineData(PostFxEffect.Vignette, "Vignette")]
         [InlineData(PostFxEffect.LUT,   "ColorGradingLUT")]
         public void MissingVariant_WarningContainsShaderName(PostFxEffect effect, string shaderName)
         {
@@ -149,6 +153,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.SSGI]  = true,
                 [PostFxEffect.Bloom] = true,
                 [PostFxEffect.ACES]  = true,
+                [PostFxEffect.Vignette] = true,
                 [PostFxEffect.LUT]   = true,
             };
             map[effect] = false;
@@ -178,6 +183,7 @@ namespace PostStackVariantTests
         [InlineData(PostFxEffect.SSGI,  "_ssgiSupported")]
         [InlineData(PostFxEffect.Bloom, "_bloomSupported")]
         [InlineData(PostFxEffect.ACES,  "_acesSupported")]
+        [InlineData(PostFxEffect.Vignette, "_vignetteSupported")]
         [InlineData(PostFxEffect.LUT,   "_lutSupported")]
         public void GracefulSkip_UnavailableEffect_FlagSetFalse(PostFxEffect effect, string flagField)
         {
@@ -187,6 +193,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.SSGI]  = true,
                 [PostFxEffect.Bloom] = true,
                 [PostFxEffect.ACES]  = true,
+                [PostFxEffect.Vignette] = true,
                 [PostFxEffect.LUT]   = true,
             };
             map[effect] = false;
@@ -211,6 +218,7 @@ namespace PostStackVariantTests
                 [PostFxEffect.SSGI]  = true,
                 [PostFxEffect.Bloom] = true,
                 [PostFxEffect.ACES]  = true,
+                [PostFxEffect.Vignette] = true,
                 [PostFxEffect.LUT]   = true,
             };
             map[unavailableEffect] = false;
@@ -224,6 +232,7 @@ namespace PostStackVariantTests
                 (PostFxEffect.SSGI,  "_ssgiSupported"),
                 (PostFxEffect.Bloom, "_bloomSupported"),
                 (PostFxEffect.ACES,  "_acesSupported"),
+                (PostFxEffect.Vignette, "_vignetteSupported"),
                 (PostFxEffect.LUT,   "_lutSupported"),
             };
             foreach (var (e, flag) in allFlags)
@@ -243,7 +252,21 @@ namespace PostStackVariantTests
             Assert.False(PostStackReflection.GetBool(stack, "_ssgiSupported"),  "_ssgiSupported");
             Assert.False(PostStackReflection.GetBool(stack, "_bloomSupported"), "_bloomSupported");
             Assert.False(PostStackReflection.GetBool(stack, "_acesSupported"),  "_acesSupported");
+            Assert.False(PostStackReflection.GetBool(stack, "_vignetteSupported"), "_vignetteSupported");
             Assert.False(PostStackReflection.GetBool(stack, "_lutSupported"),   "_lutSupported");
+        }
+
+        [Fact]
+        public void SourceSurface_ExposesVignetteFieldAndEnumMember()
+        {
+            var field = typeof(PostStack).GetField(
+                "EnableVignette",
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Instance);
+
+            Assert.NotNull(field);
+            Assert.Equal(typeof(bool), field!.FieldType);
+            Assert.Contains("Vignette", System.Enum.GetNames(typeof(PostFxEffect)));
         }
 
         // ------------------------------------------------------------------

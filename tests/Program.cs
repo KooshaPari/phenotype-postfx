@@ -19,7 +19,10 @@ static class Program
         @"EnableSSGI\s*&&\s*_ssgiSupported",
         @"EnableBloom\s*&&\s*_bloomSupported",
         @"EnableACES\s*&&\s*_acesSupported",
+        @"EnableVignette\s*&&\s*_vignetteSupported",
         @"EnableLUT\s*&&\s*_lutSupported",
+        @"public\s+bool\s+EnableVignette",
+        @"PostFxEffect\.Vignette",
     ];
 
     public static int Main()

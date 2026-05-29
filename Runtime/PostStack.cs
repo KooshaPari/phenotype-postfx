@@ -24,6 +24,7 @@ namespace Phenotype.PostFx
         SSGI,
         Bloom,
         ACES,
+        Vignette,
         LUT,
     }
 
@@ -43,6 +44,7 @@ namespace Phenotype.PostFx
             PostFxEffect.SSGI  => _owner._ssgiMat  != null,
             PostFxEffect.Bloom => _owner._bloomMat != null,
             PostFxEffect.ACES  => _owner._acesMat  != null,
+            PostFxEffect.Vignette => _owner._vignetteMat != null,
             PostFxEffect.LUT   => _owner._lutMat   != null,
             _ => false,
         };
@@ -60,6 +62,7 @@ namespace Phenotype.PostFx
         public bool EnableSSGI;
         public bool EnableBloom;
         public bool EnableACES = true;
+        public bool EnableVignette;
         public bool EnableLUT = true;
 
         [Header("SSAO")]
@@ -76,6 +79,12 @@ namespace Phenotype.PostFx
         [Header("ACES")]
         public float Exposure = 1.0f;
 
+        [Header("Vignette")]
+        public Vector2 VignetteCenter = new Vector2(0.5f, 0.5f);
+        public float VignetteIntensity = 0.45f;
+        public float VignetteSmoothness = 0.6f;
+        public float VignetteRoundness = 1.0f;
+
         [Header("LUT")]
         public Texture2D LutTexture;
 
@@ -84,6 +93,7 @@ namespace Phenotype.PostFx
         internal Material _ssgiMat;
         internal Material _bloomMat;
         internal Material _acesMat;
+        internal Material _vignetteMat;
         internal Material _lutMat;
 
         RenderTexture _ping;
@@ -97,6 +107,7 @@ namespace Phenotype.PostFx
         bool _ssgiSupported;
         bool _bloomSupported;
         bool _acesSupported;
+        bool _vignetteSupported;
         bool _lutSupported;
 
         /// <summary>
@@ -166,6 +177,7 @@ namespace Phenotype.PostFx
             _ssgiMat = TryLoad("Shaders/ScreenSpaceGI", "Hidden/ScreenSpaceGI");
             _bloomMat = TryLoad("Shaders/BrpBloom", "Hidden/Phenotype/BrpBloom");
             _acesMat = TryLoad("Shaders/BrpACES", "Hidden/Phenotype/BrpACES");
+            _vignetteMat = TryLoad("Shaders/Vignette", "Hidden/WSM3D/Vignette");
 
             Shader lutShader = Resources.Load<Shader>("Shaders/ColorGradingLUT");
             lutShader ??= Shader.Find("Hidden/ColorGradingLUT");
@@ -207,6 +219,7 @@ namespace Phenotype.PostFx
             _ssgiSupported  = CheckEffect(PostFxEffect.SSGI,  "ScreenSpaceGI",  nameof(EnableSSGI));
             _bloomSupported = CheckEffect(PostFxEffect.Bloom, "BrpBloom",       nameof(EnableBloom));
             _acesSupported  = CheckEffect(PostFxEffect.ACES,  "BrpACES",        nameof(EnableACES));
+            _vignetteSupported = CheckEffect(PostFxEffect.Vignette, "Vignette", nameof(EnableVignette));
             _lutSupported   = CheckEffect(PostFxEffect.LUT,   "ColorGradingLUT",nameof(EnableLUT));
         }
 
@@ -230,6 +243,7 @@ namespace Phenotype.PostFx
             if (_ssgiMat != null) { Destroy(_ssgiMat); _ssgiMat = null; }
             if (_bloomMat != null) { Destroy(_bloomMat); _bloomMat = null; }
             if (_acesMat != null) { Destroy(_acesMat); _acesMat = null; }
+            if (_vignetteMat != null) { Destroy(_vignetteMat); _vignetteMat = null; }
             if (_lutMat != null) { Destroy(_lutMat); _lutMat = null; }
         }
 
@@ -257,6 +271,14 @@ namespace Phenotype.PostFx
             _ssgiMat.SetFloat("_Intensity", SSGIIntensity);
         }
 
+        void ApplyVignetteParams()
+        {
+            _vignetteMat.SetVector("_Center", new Vector4(VignetteCenter.x, VignetteCenter.y, 0f, 0f));
+            _vignetteMat.SetFloat("_Intensity", VignetteIntensity);
+            _vignetteMat.SetFloat("_Smoothness", VignetteSmoothness);
+            _vignetteMat.SetFloat("_Roundness", VignetteRoundness);
+        }
+
         void EnsurePingPong(RenderTexture src)
         {
             if (_ping != null && _ping.width == src.width && _ping.height == src.height) return;
@@ -282,6 +304,7 @@ namespace Phenotype.PostFx
                            (EnableSSGI && _ssgiSupported && _ssgiMat) ||
                            (EnableBloom && _bloomSupported && _bloomMat) ||
                            (EnableACES && _acesSupported && _acesMat) ||
+                           (EnableVignette && _vignetteSupported && _vignetteMat) ||
                            (EnableLUT && _lutSupported && _lutMat);
             if (!anyPass)
             {
@@ -335,6 +358,13 @@ namespace Phenotype.PostFx
                 {
                     _acesMat.SetFloat(ExposureId, Exposure);
                     Graphics.Blit(cur, next, _acesMat);
+                    Swap(ref cur, ref next);
+                }
+
+                if (EnableVignette && _vignetteSupported && _vignetteMat)
+                {
+                    ApplyVignetteParams();
+                    Graphics.Blit(cur, next, _vignetteMat);
                     Swap(ref cur, ref next);
                 }
 
