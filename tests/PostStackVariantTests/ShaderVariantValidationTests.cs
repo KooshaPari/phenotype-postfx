@@ -209,6 +209,7 @@ namespace PostStackVariantTests
         [InlineData(PostFxEffect.SSGI)]
         [InlineData(PostFxEffect.Bloom)]
         [InlineData(PostFxEffect.ACES)]
+        [InlineData(PostFxEffect.Vignette)]
         [InlineData(PostFxEffect.LUT)]
         public void GracefulSkip_OtherEffectsUnaffected(PostFxEffect unavailableEffect)
         {
