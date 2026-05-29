@@ -20,9 +20,12 @@ static class Program
         @"EnableBloom\s*&&\s*_bloomSupported",
         @"EnableACES\s*&&\s*_acesSupported",
         @"EnableVignette\s*&&\s*_vignetteSupported",
+        @"EnableChromaticAberration\s*&&\s*_chromaticAberrationSupported",
         @"EnableLUT\s*&&\s*_lutSupported",
         @"public\s+bool\s+EnableVignette",
+        @"public\s+bool\s+EnableChromaticAberration",
         @"PostFxEffect\.Vignette",
+        @"PostFxEffect\.ChromaticAberration",
     ];
 
     public static int Main()

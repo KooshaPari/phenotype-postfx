@@ -25,6 +25,7 @@ namespace Phenotype.PostFx
         Bloom,
         ACES,
         Vignette,
+        ChromaticAberration,
         LUT,
     }
 
@@ -45,6 +46,7 @@ namespace Phenotype.PostFx
             PostFxEffect.Bloom => _owner._bloomMat != null,
             PostFxEffect.ACES  => _owner._acesMat  != null,
             PostFxEffect.Vignette => _owner._vignetteMat != null,
+            PostFxEffect.ChromaticAberration => _owner._chromaticAberrationMat != null,
             PostFxEffect.LUT   => _owner._lutMat   != null,
             _ => false,
         };
@@ -63,6 +65,7 @@ namespace Phenotype.PostFx
         public bool EnableBloom;
         public bool EnableACES = true;
         public bool EnableVignette;
+        public bool EnableChromaticAberration;
         public bool EnableLUT = true;
 
         [Header("SSAO")]
@@ -80,10 +83,13 @@ namespace Phenotype.PostFx
         public float Exposure = 1.0f;
 
         [Header("Vignette")]
-        public Vector2 VignetteCenter = new Vector2(0.5f, 0.5f);
+        public Vector2 VignetteCenter = new Vector2 { x = 0.5f, y = 0.5f };
         public float VignetteIntensity = 0.45f;
         public float VignetteSmoothness = 0.6f;
         public float VignetteRoundness = 1.0f;
+
+        [Header("Chromatic Aberration")]
+        public float ChromaticAberrationIntensity = 0.15f;
 
         [Header("LUT")]
         public Texture2D LutTexture;
@@ -94,6 +100,7 @@ namespace Phenotype.PostFx
         internal Material _bloomMat;
         internal Material _acesMat;
         internal Material _vignetteMat;
+        internal Material _chromaticAberrationMat;
         internal Material _lutMat;
 
         RenderTexture _ping;
@@ -108,6 +115,7 @@ namespace Phenotype.PostFx
         bool _bloomSupported;
         bool _acesSupported;
         bool _vignetteSupported;
+        bool _chromaticAberrationSupported;
         bool _lutSupported;
 
         /// <summary>
@@ -178,6 +186,7 @@ namespace Phenotype.PostFx
             _bloomMat = TryLoad("Shaders/BrpBloom", "Hidden/Phenotype/BrpBloom");
             _acesMat = TryLoad("Shaders/BrpACES", "Hidden/Phenotype/BrpACES");
             _vignetteMat = TryLoad("Shaders/Vignette", "Hidden/WSM3D/Vignette");
+            _chromaticAberrationMat = TryLoad("Shaders/ChromaticAberration", "Hidden/WSM3D/ChromaticAberration");
 
             Shader lutShader = Resources.Load<Shader>("Shaders/ColorGradingLUT");
             lutShader ??= Shader.Find("Hidden/ColorGradingLUT");
@@ -220,6 +229,7 @@ namespace Phenotype.PostFx
             _bloomSupported = CheckEffect(PostFxEffect.Bloom, "BrpBloom",       nameof(EnableBloom));
             _acesSupported  = CheckEffect(PostFxEffect.ACES,  "BrpACES",        nameof(EnableACES));
             _vignetteSupported = CheckEffect(PostFxEffect.Vignette, "Vignette", nameof(EnableVignette));
+            _chromaticAberrationSupported = CheckEffect(PostFxEffect.ChromaticAberration, "ChromaticAberration", nameof(EnableChromaticAberration));
             _lutSupported   = CheckEffect(PostFxEffect.LUT,   "ColorGradingLUT",nameof(EnableLUT));
         }
 
@@ -244,6 +254,7 @@ namespace Phenotype.PostFx
             if (_bloomMat != null) { Destroy(_bloomMat); _bloomMat = null; }
             if (_acesMat != null) { Destroy(_acesMat); _acesMat = null; }
             if (_vignetteMat != null) { Destroy(_vignetteMat); _vignetteMat = null; }
+            if (_chromaticAberrationMat != null) { Destroy(_chromaticAberrationMat); _chromaticAberrationMat = null; }
             if (_lutMat != null) { Destroy(_lutMat); _lutMat = null; }
         }
 
@@ -279,6 +290,11 @@ namespace Phenotype.PostFx
             _vignetteMat.SetFloat("_Roundness", VignetteRoundness);
         }
 
+        void ApplyChromaticAberrationParams()
+        {
+            _chromaticAberrationMat.SetFloat("_Intensity", ChromaticAberrationIntensity);
+        }
+
         void EnsurePingPong(RenderTexture src)
         {
             if (_ping != null && _ping.width == src.width && _ping.height == src.height) return;
@@ -305,6 +321,7 @@ namespace Phenotype.PostFx
                            (EnableBloom && _bloomSupported && _bloomMat) ||
                            (EnableACES && _acesSupported && _acesMat) ||
                            (EnableVignette && _vignetteSupported && _vignetteMat) ||
+                           (EnableChromaticAberration && _chromaticAberrationSupported && _chromaticAberrationMat) ||
                            (EnableLUT && _lutSupported && _lutMat);
             if (!anyPass)
             {
@@ -365,6 +382,13 @@ namespace Phenotype.PostFx
                 {
                     ApplyVignetteParams();
                     Graphics.Blit(cur, next, _vignetteMat);
+                    Swap(ref cur, ref next);
+                }
+
+                if (EnableChromaticAberration && _chromaticAberrationSupported && _chromaticAberrationMat)
+                {
+                    ApplyChromaticAberrationParams();
+                    Graphics.Blit(cur, next, _chromaticAberrationMat);
                     Swap(ref cur, ref next);
                 }
 
