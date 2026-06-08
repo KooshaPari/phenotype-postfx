@@ -77,7 +77,7 @@ namespace Phenotype.PostFx
 
     public sealed class PostStack : MonoBehaviour
     {
-        static readonly int BloomTexId = Shader.PropertyToID("_BloomTex");
+        public static readonly int BloomTexId = Shader.PropertyToID("_BloomTex");
         static readonly int ExposureId = Shader.PropertyToID("_Exposure");
 
         [Header("Pass Toggles")]
@@ -144,6 +144,12 @@ namespace Phenotype.PostFx
         /// implementation; replace in tests via <see cref="SetAvailabilityProvider"/>.
         /// </summary>
         IShaderAvailabilityProvider _availabilityProvider;
+
+        /// <summary>
+        /// Composio-style pass registry. Replace or extend at runtime to add
+        /// custom post-processing passes without modifying PostStack.
+        /// </summary>
+        public PostFxPassRegistry PassRegistry { get; private set; } = PostFxPassRegistry.CreateDefault();
 
         // ------------------------------------------------------------------
         // Public API for test injection
@@ -350,22 +356,7 @@ namespace Phenotype.PostFx
                 return;
             }
 
-            PostFxPass ssaoPass = new PostFxPass("ScreenSpaceAO", _ssaoMat, EnableSSAO, _ssaoSupported);
-            PostFxPass ssgiPass = new PostFxPass("ScreenSpaceGI", _ssgiMat, EnableSSGI, _ssgiSupported);
-            PostFxPass bloomPass = new PostFxPass("BrpBloom", _bloomMat, EnableBloom, _bloomSupported);
-            PostFxPass acesPass = new PostFxPass("BrpACES", _acesMat, EnableACES, _acesSupported);
-            PostFxPass vignettePass = new PostFxPass("Vignette", _vignetteMat, EnableVignette, _vignetteSupported);
-            PostFxPass chromaticAberrationPass = new PostFxPass("ChromaticAberration", _chromaticAberrationMat, EnableChromaticAberration, _chromaticAberrationSupported);
-            PostFxPass lutPass = new PostFxPass("ColorGradingLUT", _lutMat, EnableLUT, _lutSupported);
-
-            bool anyPass = ssaoPass.IsActive ||
-                           ssgiPass.IsActive ||
-                           bloomPass.IsActive ||
-                           acesPass.IsActive ||
-                           vignettePass.IsActive ||
-                           chromaticAberrationPass.IsActive ||
-                           (lutPass.IsActive && LutTexture);
-            if (!anyPass)
+            if (!PassRegistry.HasAnyActivePass(this))
             {
                 Graphics.Blit(src, dst);
                 return;
@@ -376,58 +367,34 @@ namespace Phenotype.PostFx
             {
                 RenderTexture cur = src, next = _ping;
 
-                if (BlitIfEnabled(cur, next, ssaoPass, ApplySSAOParams))
+                foreach (var effect in PassRegistry.Providers)
                 {
-                    Swap(ref cur, ref next);
-                }
+                    if (!effect.IsEnabled(this) || !effect.IsSupported(this))
+                        continue;
 
-                if (BlitIfEnabled(cur, next, ssgiPass, ApplySSGIParams))
-                {
-                    Swap(ref cur, ref next);
-                }
-
-                if (bloomPass.IsActive)
-                {
-                    int w = Mathf.Max(1, src.width / 4);
-                    int h = Mathf.Max(1, src.height / 4);
-                    RenderTexture bA = RenderTexture.GetTemporary(w, h, 0, src.format);
-                    RenderTexture bB = RenderTexture.GetTemporary(w, h, 0, src.format);
-                    try
+                    // LUT is applied as a final composite pass to dst
+                    if (effect.Effect == PostFxEffect.LUT)
                     {
-                        Graphics.Blit(cur, bA, _bloomMat, 0);
-                        Graphics.Blit(bA, bB, _bloomMat, 1);
-                        Graphics.Blit(bB, bA, _bloomMat, 2);
-                        _bloomMat.SetTexture(BloomTexId, bA);
-                        Graphics.Blit(cur, next, _bloomMat, 3);
+                        if (LutTexture != null && effect.Material != null)
+                            Graphics.Blit(cur, dst, effect.Material);
+                        else
+                            Graphics.Blit(cur, dst);
+                        continue;
+                    }
+
+                    effect.ApplyParams(this);
+                    if (effect.Render(this, cur, next))
+                    {
                         Swap(ref cur, ref next);
                     }
-                    finally
-                    {
-                        _bloomMat.SetTexture(BloomTexId, null);
-                        RenderTexture.ReleaseTemporary(bA);
-                        RenderTexture.ReleaseTemporary(bB);
-                    }
                 }
 
-                if (BlitIfEnabled(cur, next, acesPass, ApplyACESParams))
+                // If LUT was not active, blit the final result to dst
+                var lutProvider = PassRegistry.GetProvider(PostFxEffect.LUT);
+                if (lutProvider == null || !lutProvider.IsEnabled(this) || !lutProvider.IsSupported(this) || LutTexture == null)
                 {
-                    Swap(ref cur, ref next);
-                }
-
-                if (BlitIfEnabled(cur, next, vignettePass, ApplyVignetteParams))
-                {
-                    Swap(ref cur, ref next);
-                }
-
-                if (BlitIfEnabled(cur, next, chromaticAberrationPass, ApplyChromaticAberrationParams))
-                {
-                    Swap(ref cur, ref next);
-                }
-
-                if (lutPass.IsActive && LutTexture)
-                    Graphics.Blit(cur, dst, lutPass.Material!);
-                else
                     Graphics.Blit(cur, dst);
+                }
             }
             finally
             {
