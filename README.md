@@ -23,14 +23,17 @@ stack.EnableACES = true;
 | `BrpACES.shader` | Filmic ACES tonemap curve |
 | `BrpBloom.shader` | 4-pass bloom (threshold → blur H → blur V → composite) |
 | `ScreenSpaceAO.shader` | 8-tap rotated kernel SSAO |
+| `ScreenSpaceGI.shader` | Screen-space global illumination (raymarched) |
 | `ColorGradingLUT.shader` | 32-slice strip LUT lookup |
+| `ChromaticAberration.shader` | Per-channel UV offset fringe effect |
+| `Vignette.shader` | Radial darkening mask |
 
 ## Preventing Shader Stripping
 
 Unity's build-time shader stripper removes variants it cannot statically
 prove are reachable. If you ship phenotype-postfx inside an AssetBundle,
 include `Runtime/phenotype-postfx-variants.shadervariants` in your
-AssetBundle build to keep all five post-FX shaders alive:
+AssetBundle build to keep all post-FX shaders alive:
 
 ```
 # In your AssetBundle manifest / addressables group:
