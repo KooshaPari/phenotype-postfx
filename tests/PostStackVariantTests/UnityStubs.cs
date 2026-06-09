@@ -174,6 +174,10 @@ namespace UnityEngine
         public static implicit operator bool(Material? m) => m is not null;
     }
 
+    public class MaterialPropertyBlock : Object
+    {
+    }
+
     public static class Resources
     {
         public static T? Load<T>(string path) where T : Object => null;

@@ -11,6 +11,7 @@ using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using Phenotype.PostFx;
+using Phenotype.PostFx.Ports;
 using UnityEngine;
 
 namespace Phenotype.PostFx.Tests
@@ -57,6 +58,41 @@ namespace Phenotype.PostFx.Tests
 
         public bool IsAvailable(PostFxEffect effect)
             => _map.TryGetValue(effect, out bool v) && v;
+    }
+
+    /// <summary>
+    /// Quality-aware mock availability provider: returns per-effect results
+    /// based on a minimum required quality level.
+    /// </summary>
+    sealed class QualityAwareMockAvailabilityProvider : IShaderAvailabilityProvider
+    {
+        readonly System.Func<PostFxQuality> _getQuality;
+        readonly Dictionary<PostFxEffect, PostFxQuality> _minQualityMap;
+
+        public QualityAwareMockAvailabilityProvider(
+            System.Func<PostFxQuality> getQuality,
+            Dictionary<PostFxEffect, PostFxQuality> minQualityMap)
+        {
+            _getQuality = getQuality;
+            _minQualityMap = minQualityMap;
+        }
+
+        static int QualityLevel(PostFxQuality q) => q switch
+        {
+            PostFxQuality.Off    => 0,
+            PostFxQuality.Low    => 1,
+            PostFxQuality.Medium => 2,
+            PostFxQuality.High   => 3,
+            PostFxQuality.Ultra  => 4,
+            _ => 0,
+        };
+
+        public bool IsAvailable(PostFxEffect effect)
+        {
+            if (!_minQualityMap.TryGetValue(effect, out var minQuality))
+                return true;
+            return QualityLevel(_getQuality()) >= QualityLevel(minQuality);
+        }
     }
 
     /// <summary>
@@ -142,6 +178,101 @@ namespace Phenotype.PostFx.Tests
             stack.SetAvailabilityProvider(provider);
             stack.ValidateShaderVariants();
             return stack;
+        }
+
+        PostStack CreateStackWithQuality(IShaderAvailabilityProvider provider, PostFxQuality quality)
+        {
+            var go = new GameObject("TestStack");
+            _gameObjects.Add(go);
+            var stack = go.AddComponent<PostStack>();
+            stack.Quality = quality;
+            stack.SetAvailabilityProvider(provider);
+            stack.ValidateShaderVariants();
+            return stack;
+        }
+
+        // ------------------------------------------------------------------
+        // Stress test data sources
+        // ------------------------------------------------------------------
+
+        static readonly PostFxEffect[] AllEffects = new[]
+        {
+            PostFxEffect.SSAO,
+            PostFxEffect.SSGI,
+            PostFxEffect.Bloom,
+            PostFxEffect.ACES,
+            PostFxEffect.Vignette,
+            PostFxEffect.ChromaticAberration,
+            PostFxEffect.LUT,
+        };
+
+        static readonly Dictionary<PostFxEffect, string> FlagNames = new()
+        {
+            [PostFxEffect.SSAO]  = "_ssaoSupported",
+            [PostFxEffect.SSGI]  = "_ssgiSupported",
+            [PostFxEffect.Bloom] = "_bloomSupported",
+            [PostFxEffect.ACES]  = "_acesSupported",
+            [PostFxEffect.Vignette] = "_vignetteSupported",
+            [PostFxEffect.ChromaticAberration] = "_chromaticAberrationSupported",
+            [PostFxEffect.LUT]   = "_lutSupported",
+        };
+
+        static int PopCount(int mask)
+        {
+            int count = 0;
+            for (int i = 0; i < 7; i++)
+                if ((mask & (1 << i)) != 0) count++;
+            return count;
+        }
+
+        static IEnumerable<TestCaseData> AllAvailabilityCombinations()
+        {
+            for (int mask = 0; mask < (1 << 7); mask++)
+            {
+                var map = new Dictionary<PostFxEffect, bool>();
+                for (int i = 0; i < 7; i++)
+                    map[AllEffects[i]] = (mask & (1 << i)) != 0;
+
+                int unavailableCount = 7 - PopCount(mask);
+                yield return new TestCaseData(map, unavailableCount)
+                    .SetName($"AvailabilityMask_{mask:X2}");
+            }
+        }
+
+        static readonly Dictionary<PostFxEffect, PostFxQuality> MinQualityMap = new()
+        {
+            [PostFxEffect.SSAO]  = PostFxQuality.Low,
+            [PostFxEffect.SSGI]  = PostFxQuality.Medium,
+            [PostFxEffect.Bloom] = PostFxQuality.Low,
+            [PostFxEffect.ACES]  = PostFxQuality.Low,
+            [PostFxEffect.Vignette] = PostFxQuality.Low,
+            [PostFxEffect.ChromaticAberration] = PostFxQuality.High,
+            [PostFxEffect.LUT]   = PostFxQuality.Low,
+        };
+
+        static int QualityLevel(PostFxQuality q) => q switch
+        {
+            PostFxQuality.Off    => 0,
+            PostFxQuality.Low    => 1,
+            PostFxQuality.Medium => 2,
+            PostFxQuality.High   => 3,
+            PostFxQuality.Ultra  => 4,
+            _ => 0,
+        };
+
+        static IEnumerable<TestCaseData> AllQualityCombinations()
+        {
+            var qualities = new[] { PostFxQuality.Low, PostFxQuality.Medium, PostFxQuality.High, PostFxQuality.Ultra };
+            foreach (var effect in AllEffects)
+            {
+                foreach (var quality in qualities)
+                {
+                    var minQuality = MinQualityMap[effect];
+                    bool expectedAvailable = QualityLevel(quality) >= QualityLevel(minQuality);
+                    yield return new TestCaseData(effect, quality, expectedAvailable)
+                        .SetName($"Quality_{effect}_{quality}");
+                }
+            }
         }
 
         // ------------------------------------------------------------------
@@ -375,6 +506,49 @@ namespace Phenotype.PostFx.Tests
             Assert.IsFalse(GraphicsCapture.Blits.Any(call => call.Material == material));
         }
 #endif
+
+        // ------------------------------------------------------------------
+        // Stress tests: all 128 availability combinations
+        // ------------------------------------------------------------------
+
+        [TestCaseSource(nameof(AllAvailabilityCombinations))]
+        public void StressTest_AvailabilityCombinations_WarningsMatchUnavailableCount(Dictionary<PostFxEffect, bool> map, int expectedUnavailableCount)
+        {
+            var stack = CreateStack(new MockAvailabilityProvider(map));
+            Assert.AreEqual(expectedUnavailableCount, _warnings.Count);
+        }
+
+        [TestCaseSource(nameof(AllAvailabilityCombinations))]
+        public void StressTest_AvailabilityCombinations_FlagsMatchAvailability(Dictionary<PostFxEffect, bool> map, int expectedUnavailableCount)
+        {
+            var stack = CreateStack(new MockAvailabilityProvider(map));
+
+            foreach (var effect in AllEffects)
+            {
+                bool expected = map[effect];
+                string flag = FlagNames[effect];
+                Assert.AreEqual(expected, PostStackReflection.GetBool(stack, flag),
+                    $"{flag} should be {expected} for mask {map}");
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Stress tests: quality-level combinations
+        // ------------------------------------------------------------------
+
+        [TestCaseSource(nameof(AllQualityCombinations))]
+        public void StressTest_QualityAwareAvailability(PostFxEffect effect, PostFxQuality quality, bool expectedAvailable)
+        {
+            var stack = (PostStack)Activator.CreateInstance(typeof(PostStack))!;
+            stack.Quality = quality;
+            var provider = new QualityAwareMockAvailabilityProvider(() => stack.Quality, MinQualityMap);
+            stack.SetAvailabilityProvider(provider);
+            stack.ValidateShaderVariants();
+
+            string flag = FlagNames[effect];
+            Assert.AreEqual(expectedAvailable, PostStackReflection.GetBool(stack, flag),
+                $"{effect} should {(expectedAvailable ? "be" : "not be")} available at quality {quality}");
+        }
 
         // ------------------------------------------------------------------
         // Idempotency: calling ValidateShaderVariants twice doesn't double-warn

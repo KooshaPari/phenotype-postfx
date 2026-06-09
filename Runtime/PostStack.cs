@@ -1,4 +1,5 @@
 using UnityEngine;
+using Phenotype.PostFx.Ports;
 
 namespace Phenotype.PostFx
 {
@@ -88,6 +89,9 @@ namespace Phenotype.PostFx
         public bool EnableVignette;
         public bool EnableChromaticAberration;
         public bool EnableLUT = true;
+
+        [Header("Quality")]
+        public PostFxQuality Quality = PostFxQuality.High;
 
         [Header("SSAO")]
         public int SSAOSamples = 12;
