@@ -35,7 +35,7 @@ tasks:
         python3 -c "import json, sys; json.load(open('package.json'))" && echo "  Valid JSON"
         python3 -c "import json, sys; data=json.load(open('package.json')); required=['name','version','unity']; missing=[f for f in required if not data.get(f)]; [sys.exit(1) if missing else None]; [print(f'  {f} = {data[f]}') for f in required]"
         echo "=== Shader existence check ==="
-        SHADERS=$(grep -oP '"Shaders/[^"]+(?=")' Runtime/PostStack.cs | sort -u)
+        SHADERS=$(python3 -c "import re, sys; text=open('Runtime/PostStack.cs').read(); matches=re.findall(r'\"Shaders/[^\"]+\"', text); [print(m[1:-1]) for m in matches]")
         for rel_path in $SHADERS; do
           if [ -f "Runtime/$rel_path" ] || [ -f "Runtime/${rel_path}.shader" ]; then echo "  ✓ $rel_path"; else echo "  ✗ MISSING: $rel_path"; exit 1; fi
         done
