@@ -13,20 +13,33 @@ namespace Phenotype.PostFx
     /// </summary>
     public interface IShaderAvailabilityProvider
     {
-        /// <summary>Returns true when the shader for the given effect is loaded
-        /// and all required variants are present in the build.</summary>
+        /// <summary>
+        /// Returns <see langword="true"/> when the shader for the given effect is loaded
+        /// and all required variants are present in the build.
+        /// </summary>
+        /// <param name="effect">The post-processing effect to check.</param>
+        /// <returns>
+        /// <see langword="true"/> if the shader is available; otherwise, <see langword="false"/>.
+        /// </returns>
         bool IsAvailable(PostFxEffect effect);
     }
 
     /// <summary>Identifies each post-processing effect.</summary>
     public enum PostFxEffect
     {
+        /// <summary>Screen Space Ambient Occlusion.</summary>
         SSAO,
+        /// <summary>Screen Space Global Illumination.</summary>
         SSGI,
+        /// <summary>Bloom glow effect.</summary>
         Bloom,
+        /// <summary>ACES tone mapping.</summary>
         ACES,
+        /// <summary>Vignette darkening.</summary>
         Vignette,
+        /// <summary>Chromatic aberration distortion.</summary>
         ChromaticAberration,
+        /// <summary>Color Look-Up Table grading.</summary>
         LUT,
     }
 
@@ -35,11 +48,41 @@ namespace Phenotype.PostFx
     /// </summary>
     internal readonly struct PostFxPass
     {
+        /// <summary>
+        /// Gets the name of the shader used by this pass.
+        /// </summary>
+        /// <value>The shader name.</value>
         public readonly string ShaderName;
+
+        /// <summary>
+        /// Gets the material instance for this pass.
+        /// </summary>
+        /// <value>The material, or <see langword="null"/> if unavailable.</value>
         public readonly Material? Material;
+
+        /// <summary>
+        /// Gets a value indicating whether the pass is enabled.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> if enabled; otherwise, <see langword="false"/>.
+        /// </value>
         public readonly bool Enabled;
+
+        /// <summary>
+        /// Gets a value indicating whether the pass is supported in this build.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> if supported; otherwise, <see langword="false"/>.
+        /// </value>
         public readonly bool Supported;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PostFxPass"/> struct.
+        /// </summary>
+        /// <param name="shaderName">The shader name.</param>
+        /// <param name="material">The material instance.</param>
+        /// <param name="enabled">Whether the pass is enabled.</param>
+        /// <param name="supported">Whether the pass is supported.</param>
         public PostFxPass(string shaderName, Material? material, bool enabled, bool supported)
         {
             ShaderName = shaderName;
@@ -48,6 +91,13 @@ namespace Phenotype.PostFx
             Supported = supported;
         }
 
+        /// <summary>
+        /// Gets a value indicating whether this pass is active.
+        /// A pass is active when it is enabled, supported, and has a valid material.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> if the pass should execute; otherwise, <see langword="false"/>.
+        /// </value>
         public bool IsActive => Enabled && Supported && Material;
     }
 
@@ -59,8 +109,20 @@ namespace Phenotype.PostFx
     internal sealed class DefaultShaderAvailabilityProvider : IShaderAvailabilityProvider
     {
         readonly PostStack _owner;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DefaultShaderAvailabilityProvider"/> class.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> to query for material availability.</param>
         internal DefaultShaderAvailabilityProvider(PostStack owner) => _owner = owner;
 
+        /// <summary>
+        /// Checks whether the specified effect's material is loaded.
+        /// </summary>
+        /// <param name="effect">The effect to check.</param>
+        /// <returns>
+        /// <see langword="true"/> if the material is non-null; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool IsAvailable(PostFxEffect effect) => effect switch
         {
             PostFxEffect.SSAO  => _owner._ssaoMat  != null,
@@ -76,47 +138,198 @@ namespace Phenotype.PostFx
 
     // ---------------------------------------------------------------------------
 
+    /// <summary>
+    /// Central driver for the post-processing stack.
+    /// Attach this <see cref="MonoBehaviour"/> to a camera to apply a configurable
+    /// chain of post-processing effects (SSAO, Bloom, ACES, Vignette, etc.).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The stack initialises materials on <c>Awake</c>, validates shader variants,
+    /// and composites enabled passes via <c>OnRenderImage</c>.  Pass order is
+    /// controlled by <see cref="PostFxPassRegistry"/>.
+    /// </para>
+    /// <para>
+    /// Example usage in a scene:
+    /// <code>
+    /// var stack = camera.gameObject.AddComponent&lt;PostStack&gt;();
+    /// stack.EnableBloom = true;
+    /// stack.EnableACES = true;
+    /// </code>
+    /// </para>
+    /// </remarks>
     public sealed class PostStack : MonoBehaviour
     {
+        /// <summary>
+        /// Shader property ID for the bloom texture (<c>_BloomTex</c>).
+        /// Used by <see cref="BloomPassProvider"/> to bind the blurred intermediate.
+        /// </summary>
         public static readonly int BloomTexId = Shader.PropertyToID("_BloomTex");
         static readonly int ExposureId = Shader.PropertyToID("_Exposure");
 
         [Header("Pass Toggles")]
+        /// <summary>
+        /// Enables or disables the Screen Space Ambient Occlusion (SSAO) pass.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to enable SSAO; otherwise, <see langword="false"/>.
+        /// Default is <see langword="true"/>.
+        /// </value>
         public bool EnableSSAO = true;
+
+        /// <summary>
+        /// Enables or disables the Screen Space Global Illumination (SSGI) pass.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to enable SSGI; otherwise, <see langword="false"/>.
+        /// Default is <see langword="false"/>.
+        /// </value>
         public bool EnableSSGI;
+
+        /// <summary>
+        /// Enables or disables the Bloom pass.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to enable Bloom; otherwise, <see langword="false"/>.
+        /// Default is <see langword="false"/>.
+        /// </value>
         public bool EnableBloom;
+
+        /// <summary>
+        /// Enables or disables the ACES tone mapping pass.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to enable ACES; otherwise, <see langword="false"/>.
+        /// Default is <see langword="true"/>.
+        /// </value>
         public bool EnableACES = true;
+
+        /// <summary>
+        /// Enables or disables the Vignette pass.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to enable Vignette; otherwise, <see langword="false"/>.
+        /// Default is <see langword="false"/>.
+        /// </value>
         public bool EnableVignette;
+
+        /// <summary>
+        /// Enables or disables the Chromatic Aberration pass.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to enable Chromatic Aberration; otherwise, <see langword="false"/>.
+        /// Default is <see langword="false"/>.
+        /// </value>
         public bool EnableChromaticAberration;
+
+        /// <summary>
+        /// Enables or disables the Color Look-Up Table (LUT) grading pass.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> to enable LUT; otherwise, <see langword="false"/>.
+        /// Default is <see langword="true"/>.
+        /// </value>
         public bool EnableLUT = true;
 
         [Header("Quality")]
+        /// <summary>
+        /// The overall quality preset for the post-processing stack.
+        /// </summary>
+        /// <value>
+        /// A <see cref="PostFxQuality"/> value. Default is <see cref="PostFxQuality.High"/>.
+        /// </value>
         public PostFxQuality Quality = PostFxQuality.High;
 
         [Header("SSAO")]
+        /// <summary>
+        /// Number of sample points used by the SSAO kernel.
+        /// Higher values improve quality at the cost of performance.
+        /// </summary>
+        /// <value>The sample count. Default is 12.</value>
         public int SSAOSamples = 12;
+
+        /// <summary>
+        /// World-space radius of the SSAO sampling sphere.
+        /// </summary>
+        /// <value>The radius in world units. Default is 2.0f.</value>
         public float SSAORadius = 2.0f;
+
+        /// <summary>
+        /// Depth bias for SSAO to avoid self-occlusion artifacts.
+        /// </summary>
+        /// <value>The bias value. Default is 0.0012f.</value>
         public float SSAOBias = 0.0012f;
+
+        /// <summary>
+        /// Intensity multiplier for the SSAO occlusion mask.
+        /// </summary>
+        /// <value>The intensity. Default is 1.0f.</value>
         public float SSAOIntensity = 1.0f;
 
         [Header("SSGI")]
+        /// <summary>
+        /// Number of sample points used by the SSGI kernel.
+        /// </summary>
+        /// <value>The sample count. Default is 12.</value>
         public int SSGISamples = 12;
+
+        /// <summary>
+        /// World-space radius of the SSGI sampling sphere.
+        /// </summary>
+        /// <value>The radius in world units. Default is 1.8f.</value>
         public float SSGIRadius = 1.8f;
+
+        /// <summary>
+        /// Intensity multiplier for the SSGI indirect lighting contribution.
+        /// </summary>
+        /// <value>The intensity. Default is 0.45f.</value>
         public float SSGIIntensity = 0.45f;
 
         [Header("ACES")]
+        /// <summary>
+        /// Exposure value applied before ACES tone mapping.
+        /// </summary>
+        /// <value>The exposure. Default is 1.0f (no change).</value>
         public float Exposure = 1.0f;
 
         [Header("Vignette")]
+        /// <summary>
+        /// Normalized screen-space center of the vignette effect.
+        /// </summary>
+        /// <value>The center position. Default is (0.5, 0.5).</value>
         public Vector2 VignetteCenter = new Vector2 { x = 0.5f, y = 0.5f };
+
+        /// <summary>
+        /// Strength of the vignette darkening.
+        /// </summary>
+        /// <value>The intensity. Default is 0.45f.</value>
         public float VignetteIntensity = 0.45f;
+
+        /// <summary>
+        /// Falloff smoothness of the vignette edge.
+        /// </summary>
+        /// <value>The smoothness. Default is 0.6f.</value>
         public float VignetteSmoothness = 0.6f;
+
+        /// <summary>
+        /// Roundness factor of the vignette shape (0 = square, 1 = circular).
+        /// </summary>
+        /// <value>The roundness. Default is 1.0f.</value>
         public float VignetteRoundness = 1.0f;
 
         [Header("Chromatic Aberration")]
+        /// <summary>
+        /// Strength of the RGB channel separation.
+        /// </summary>
+        /// <value>The intensity. Default is 0.15f.</value>
         public float ChromaticAberrationIntensity = 0.15f;
 
         [Header("LUT")]
+        /// <summary>
+        /// The color grading Look-Up Table texture.
+        /// Set to <see langword="null"/> to disable LUT grading.
+        /// </summary>
+        /// <value>The LUT <see cref="Texture2D"/>.</value>
         public Texture2D LutTexture;
 
         // Materials — internal so DefaultShaderAvailabilityProvider can read them
@@ -144,19 +357,24 @@ namespace Phenotype.PostFx
         internal bool _lutSupported;
 
         /// <summary>
-        /// Injectable shader-availability provider.  Defaults to the production
+        /// Injectable shader-availability provider. Defaults to the production
         /// implementation; replace in tests via <see cref="SetAvailabilityProvider"/>.
         /// </summary>
         IShaderAvailabilityProvider _availabilityProvider;
 
         /// <summary>
         /// Composio-style pass registry. Replace or extend at runtime to add
-        /// custom post-processing passes without modifying PostStack.
+        /// custom post-processing passes without modifying <see cref="PostStack"/>.
         /// </summary>
+        /// <value>The current pass registry.</value>
         public PostFxPassRegistry PassRegistry { get; private set; } = PostFxPassRegistry.CreateDefault();
 
-        // BindOwner so providers that cache the owner (e.g. BlitPassProvider)
-        // have it before Awake/InitMaterials run.
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PostStack"/> class.
+        /// Binds the owner to <see cref="PassRegistry"/> so providers that cache
+        /// the owner (e.g. <see cref="BlitPassProvider"/>) have it before
+        /// <c>Awake</c> or <c>InitMaterials</c> run.
+        /// </summary>
         public PostStack()
         {
             PassRegistry.Init(this);
@@ -167,10 +385,16 @@ namespace Phenotype.PostFx
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Override the shader-availability provider used by
-        /// <see cref="ValidateShaderVariants"/>.  Call before <c>Awake</c> or
-        /// immediately after construction in tests.
+        /// Overrides the shader-availability provider used by
+        /// <see cref="ValidateShaderVariants"/>.
         /// </summary>
+        /// <param name="provider">The provider to use.</param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="provider"/> is <see langword="null"/>.
+        /// </exception>
+        /// <remarks>
+        /// Call before <c>Awake</c> or immediately after construction in tests.
+        /// </remarks>
         public void SetAvailabilityProvider(IShaderAvailabilityProvider provider)
             => _availabilityProvider = provider ?? throw new System.ArgumentNullException(nameof(provider));
 

@@ -10,22 +10,48 @@ namespace Phenotype.PostFx
     /// </summary>
     public interface IPostFxPassProvider : IPostFxPass
     {
-        /// <summary>Unique identifier for this pass provider.</summary>
+        /// <summary>
+        /// Gets the unique identifier for this pass provider.
+        /// </summary>
+        /// <value>The <see cref="PostFxEffect"/> value.</value>
         PostFxEffect Effect { get; }
 
-        /// <summary>Human-readable display name.</summary>
+        /// <summary>
+        /// Gets the human-readable display name.
+        /// </summary>
+        /// <value>The display name.</value>
         string DisplayName { get; }
 
-        /// <summary>Material used for this pass. Null if the shader is unavailable.</summary>
+        /// <summary>
+        /// Gets the material used for this pass.
+        /// </summary>
+        /// <value>
+        /// The <see cref="Material"/> instance, or <see langword="null"/> if the shader is unavailable.
+        /// </value>
         Material? Material { get; }
 
-        /// <summary>Whether the pass is currently enabled by the user.</summary>
+        /// <summary>
+        /// Determines whether the pass is currently enabled by the user.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
+        /// <returns>
+        /// <see langword="true"/> if the pass is enabled; otherwise, <see langword="false"/>.
+        /// </returns>
         bool IsEnabled(PostStack owner);
 
-        /// <summary>Whether the shader is supported in this build.</summary>
+        /// <summary>
+        /// Determines whether the shader is supported in this build.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
+        /// <returns>
+        /// <see langword="true"/> if the shader is supported; otherwise, <see langword="false"/>.
+        /// </returns>
         bool IsSupported(PostStack owner);
 
-        /// <summary>Apply per-frame parameters before blit.</summary>
+        /// <summary>
+        /// Applies per-frame parameters before rendering.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
         void ApplyParams(PostStack owner);
     }
 
@@ -41,12 +67,36 @@ namespace Phenotype.PostFx
         readonly System.Func<PostStack, bool> _supportedAccessor;
         readonly System.Action<PostStack> _applyParams;
 
+        /// <summary>
+        /// Gets the effect identifier for this pass.
+        /// </summary>
+        /// <value>The <see cref="PostFxEffect"/>.</value>
         public PostFxEffect Effect { get; }
+
+        /// <summary>
+        /// Gets the human-readable display name.
+        /// </summary>
+        /// <value>The display name.</value>
         public string DisplayName { get; }
+
+        /// <summary>
+        /// Gets the material for this pass, or <see langword="null"/> if the owner is not bound.
+        /// </summary>
+        /// <value>The <see cref="Material"/> instance.</value>
         public Material? Material => _owner != null ? _materialAccessor(_owner) : null;
 
         PostStack _owner;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BlitPassProvider"/> class.
+        /// </summary>
+        /// <param name="effect">The effect identifier.</param>
+        /// <param name="displayName">The human-readable display name.</param>
+        /// <param name="shaderName">The shader name for debugging.</param>
+        /// <param name="materialAccessor">Function that returns the material for a given owner.</param>
+        /// <param name="enabledAccessor">Function that returns whether the pass is enabled.</param>
+        /// <param name="supportedAccessor">Function that returns whether the pass is supported.</param>
+        /// <param name="applyParams">Action that applies per-frame parameters.</param>
         public BlitPassProvider(
             PostFxEffect effect,
             string displayName,
@@ -65,13 +115,44 @@ namespace Phenotype.PostFx
             _applyParams = applyParams;
         }
 
+        /// <summary>
+        /// Binds the owning <see cref="PostStack"/>.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
         public void Init(PostStack owner) => _owner = owner;
 
+        /// <summary>
+        /// Determines whether the pass is enabled.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
+        /// <returns>
+        /// <see langword="true"/> if the pass is enabled; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool IsEnabled(PostStack owner) => _enabledAccessor(owner);
+
+        /// <summary>
+        /// Determines whether the pass is supported.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
+        /// <returns>
+        /// <see langword="true"/> if the pass is supported; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool IsSupported(PostStack owner) => _supportedAccessor(owner);
 
+        /// <summary>
+        /// Applies per-frame parameters.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
         public void ApplyParams(PostStack owner) => _applyParams(owner);
 
+        /// <summary>
+        /// Renders the pass from <paramref name="src"/> into <paramref name="dst"/>.
+        /// </summary>
+        /// <param name="src">The source render texture.</param>
+        /// <param name="dst">The destination render texture.</param>
+        /// <returns>
+        /// <see langword="true"/> if the blit was performed; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool Render(RenderTexture src, RenderTexture dst)
         {
             var mat = Material;
@@ -80,6 +161,9 @@ namespace Phenotype.PostFx
             return true;
         }
 
+        /// <summary>
+        /// No-op. Single-blit providers do not hold disposable resources.
+        /// </summary>
         public void Dispose() { }
     }
 
@@ -89,19 +173,66 @@ namespace Phenotype.PostFx
     /// </summary>
     internal sealed class BloomPassProvider : IPostFxPassProvider
     {
+        /// <summary>
+        /// Gets the effect identifier. Always <see cref="PostFxEffect.Bloom"/>.
+        /// </summary>
+        /// <value><see cref="PostFxEffect.Bloom"/>.</value>
         public PostFxEffect Effect => PostFxEffect.Bloom;
+
+        /// <summary>
+        /// Gets the display name. Always "Bloom".
+        /// </summary>
+        /// <value>"Bloom".</value>
         public string DisplayName => "Bloom";
 
+        /// <summary>
+        /// Gets the bloom material, or <see langword="null"/> if the owner is not bound.
+        /// </summary>
+        /// <value>The <see cref="Material"/> instance.</value>
         public Material? Material => _owner?._bloomMat;
 
         PostStack _owner;
+
+        /// <summary>
+        /// Binds the owning <see cref="PostStack"/>.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
         public void Init(PostStack owner) => _owner = owner;
 
+        /// <summary>
+        /// Determines whether the pass is enabled.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
+        /// <returns>
+        /// <see langword="true"/> if <see cref="PostStack.EnableBloom"/> is <see langword="true"/>;
+        /// otherwise, <see langword="false"/>.
+        /// </returns>
         public bool IsEnabled(PostStack owner) => owner.EnableBloom;
+
+        /// <summary>
+        /// Determines whether the pass is supported.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
+        /// <returns>
+        /// <see langword="true"/> if the bloom shader is available; otherwise, <see langword="false"/>.
+        /// </returns>
         public bool IsSupported(PostStack owner) => owner._bloomSupported;
 
+        /// <summary>
+        /// No-op. Bloom parameters are applied via the material directly.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> that owns this pass.</param>
         public void ApplyParams(PostStack owner) { }
 
+        /// <summary>
+        /// Renders the 4-pass bloom chain.
+        /// </summary>
+        /// <param name="src">The source render texture.</param>
+        /// <param name="dst">The destination render texture.</param>
+        /// <returns>
+        /// <see langword="true"/> if the bloom material was available and rendering succeeded;
+        /// otherwise, <see langword="false"/>.
+        /// </returns>
         public bool Render(RenderTexture src, RenderTexture dst)
         {
             var bloomMat = _owner?._bloomMat;
@@ -128,6 +259,9 @@ namespace Phenotype.PostFx
             }
         }
 
+        /// <summary>
+        /// No-op. Bloom temporary targets are released inside <see cref="Render"/>.
+        /// </summary>
         public void Dispose() { }
     }
 
@@ -141,10 +275,16 @@ namespace Phenotype.PostFx
         readonly Dictionary<PostFxEffect, IPostFxPassProvider> _providers = new();
         readonly List<PostFxEffect> _renderOrder = new();
 
-        /// <summary>All registered providers in current render order.</summary>
+        /// <summary>
+        /// Gets all registered providers in current render order.
+        /// </summary>
+        /// <value>An enumerable of <see cref="IPostFxPassProvider"/>.</value>
         public IEnumerable<IPostFxPassProvider> Providers => _renderOrder.ConvertAll(e => _providers[e]);
 
-        /// <summary>Register a provider. Overwrites any existing provider for the same effect.</summary>
+        /// <summary>
+        /// Registers a provider. Overwrites any existing provider for the same effect.
+        /// </summary>
+        /// <param name="provider">The provider to register.</param>
         public void Register(IPostFxPassProvider provider)
         {
             _providers[provider.Effect] = provider;
@@ -152,14 +292,22 @@ namespace Phenotype.PostFx
                 _renderOrder.Add(provider.Effect);
         }
 
-        /// <summary>Remove a provider from the registry.</summary>
+        /// <summary>
+        /// Removes a provider from the registry.
+        /// </summary>
+        /// <param name="effect">The effect to unregister.</param>
         public void Unregister(PostFxEffect effect)
         {
             _providers.Remove(effect);
             _renderOrder.Remove(effect);
         }
 
-        /// <summary>Change the render order of effects. Any omitted effects keep their relative order.</summary>
+        /// <summary>
+        /// Changes the render order of effects.
+        /// </summary>
+        /// <param name="order">
+        /// The desired render order. Any omitted effects keep their relative order.
+        /// </param>
         public void SetRenderOrder(params PostFxEffect[] order)
         {
             var newOrder = new List<PostFxEffect>(order);
@@ -172,7 +320,13 @@ namespace Phenotype.PostFx
             _renderOrder.AddRange(newOrder);
         }
 
-        /// <summary>Get a provider by effect, or null if not registered.</summary>
+        /// <summary>
+        /// Gets a provider by effect.
+        /// </summary>
+        /// <param name="effect">The effect to look up.</param>
+        /// <returns>
+        /// The registered <see cref="IPostFxPassProvider"/>, or <see langword="null"/> if not registered.
+        /// </returns>
         public IPostFxPassProvider? GetProvider(PostFxEffect effect)
         {
             _providers.TryGetValue(effect, out var provider);
@@ -180,9 +334,10 @@ namespace Phenotype.PostFx
         }
 
         /// <summary>
-        /// Initialise all providers that require an owner reference.
-        /// Call after construction or after replacing the registry.
+        /// Initialises all providers that require an owner reference.
         /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> to bind to each provider.</param>
+        /// <remarks>Call after construction or after replacing the registry.</remarks>
         public void Init(PostStack owner)
         {
             foreach (var p in _providers.Values)
@@ -192,7 +347,7 @@ namespace Phenotype.PostFx
         }
 
         /// <summary>
-        /// Dispose all registered providers and clear the registry.
+        /// Disposes all registered providers and clears the registry.
         /// </summary>
         public void Dispose()
         {
@@ -204,7 +359,14 @@ namespace Phenotype.PostFx
             _renderOrder.Clear();
         }
 
-        /// <summary>True if any registered pass is active for the given owner.</summary>
+        /// <summary>
+        /// Determines whether any registered pass is active for the given owner.
+        /// </summary>
+        /// <param name="owner">The <see cref="PostStack"/> to check.</param>
+        /// <returns>
+        /// <see langword="true"/> if at least one pass is enabled, supported, and has a material;
+        /// otherwise, <see langword="false"/>.
+        /// </returns>
         public bool HasAnyActivePass(PostStack owner)
         {
             foreach (var effect in _renderOrder)
@@ -219,8 +381,9 @@ namespace Phenotype.PostFx
         }
 
         /// <summary>
-        /// Build the default registry with all built-in passes.
+        /// Builds the default registry with all built-in passes.
         /// </summary>
+        /// <returns>A new <see cref="PostFxPassRegistry"/> with built-in passes pre-registered.</returns>
         public static PostFxPassRegistry CreateDefault()
         {
             var registry = new PostFxPassRegistry();

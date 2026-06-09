@@ -23,26 +23,60 @@ namespace Phenotype.PostFx.Urp
     /// </summary>
     public interface IUrpPostFxPass
     {
-        /// <summary>Stable name for profiling + ordering.</summary>
+        /// <summary>
+        /// Gets the stable name of this pass, used for profiling and ordering.
+        /// </summary>
+        /// <value>The pass name.</value>
         string Name { get; }
 
-        /// <summary>True if this pass should run in the current frame.</summary>
+        /// <summary>
+        /// Gets a value indicating whether this pass should run in the current frame.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> if the pass is enabled; otherwise, <see langword="false"/>.
+        /// </value>
         bool IsEnabled { get; }
 
         /// <summary>
-        /// Record the pass into the supplied RenderGraph.  The pass is responsible
-        /// for declaring its inputs (via UseTexture) and outputs (via SetRenderAttachment).
+        /// Records the pass into the supplied RenderGraph.
         /// </summary>
+        /// <param name="graph">The RenderGraph to record into.</param>
+        /// <param name="frameData">Context container with frame-level data.</param>
+        /// <param name="ctx">Per-camera context for the URP 17 adapter.</param>
+        /// <remarks>
+        /// The pass is responsible for declaring its inputs (via <c>UseTexture</c>)
+        /// and outputs (via <c>SetRenderAttachment</c>).
+        /// </remarks>
         void RecordRenderGraph(RenderGraph graph, ContextContainer frameData, UrpPostFxContext ctx);
     }
 
     /// <summary>Per-camera context for the URP 17 adapter.</summary>
     public sealed class UrpPostFxContext
     {
+        /// <summary>
+        /// Gets the camera being rendered.
+        /// </summary>
+        /// <value>The active camera.</value>
         public Camera Camera { get; }
+
+        /// <summary>
+        /// Gets the universal resource data for this frame.
+        /// </summary>
+        /// <value>The resource data.</value>
         public UniversalResourceData ResourceData { get; }
+
+        /// <summary>
+        /// Gets the universal camera data for this frame.
+        /// </summary>
+        /// <value>The camera data.</value>
         public UniversalCameraData CameraData { get; }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="UrpPostFxContext"/> class.
+        /// </summary>
+        /// <param name="camera">The camera being rendered.</param>
+        /// <param name="resourceData">The universal resource data.</param>
+        /// <param name="cameraData">The universal camera data.</param>
         public UrpPostFxContext(Camera camera, UniversalResourceData resourceData, UniversalCameraData cameraData)
         {
             Camera = camera;
@@ -52,21 +86,51 @@ namespace Phenotype.PostFx.Urp
     }
 
     /// <summary>
-    /// Adapter that bridges an existing IPostFxPass (BRP-side) to the URP 17
-    /// RecordRenderGraph API.  It allocates a temporary texture, runs the BRP
+    /// Adapter that bridges an existing <see cref="IPostFxPass"/> (BRP-side) to the URP 17
+    /// <c>RecordRenderGraph</c> API. It allocates a temporary texture, runs the BRP
     /// blit into it, then writes the result back to the active color buffer.
     /// </summary>
     public sealed class BrpToUrpAdapter : IUrpPostFxPass
     {
         private readonly IPostFxPass _brpPass;
+
+        /// <summary>
+        /// Gets the name of the wrapped BRP pass.
+        /// </summary>
+        /// <value>The pass name.</value>
         public string Name => _brpPass.Name;
+
+        /// <summary>
+        /// Gets a value indicating whether the wrapped BRP pass is enabled.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> if the pass is enabled; otherwise, <see langword="false"/>.
+        /// </value>
         public bool IsEnabled => _brpPass.IsEnabled;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BrpToUrpAdapter"/> class.
+        /// </summary>
+        /// <param name="brpPass">The BRP pass to wrap.</param>
+        /// <exception cref="System.ArgumentNullException">
+        /// Thrown when <paramref name="brpPass"/> is <see langword="null"/>.
+        /// </exception>
         public BrpToUrpAdapter(IPostFxPass brpPass)
         {
             _brpPass = brpPass ?? throw new System.ArgumentNullException(nameof(brpPass));
         }
 
+        /// <summary>
+        /// Records the BRP pass into the URP RenderGraph.
+        /// </summary>
+        /// <param name="graph">The RenderGraph to record into.</param>
+        /// <param name="frameData">Context container with frame-level data.</param>
+        /// <param name="ctx">Per-camera context for the URP 17 adapter.</param>
+        /// <remarks>
+        /// The actual URP 17 implementation requires Unity 6 + URP 17 packages.
+        /// This stub documents the API; the migration work (T27) will fill it in
+        /// once the project upgrades to Unity 6 in a follow-up.
+        /// </remarks>
         public void RecordRenderGraph(RenderGraph graph, ContextContainer frameData, UrpPostFxContext ctx)
         {
             // The actual URP 17 implementation requires Unity 6 + URP 17 packages.

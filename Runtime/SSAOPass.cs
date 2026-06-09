@@ -18,17 +18,66 @@ namespace Phenotype.PostFx
     /// Supports configurable radius, intensity, bias, and kernel size, and generates
     /// a deterministic sample kernel for depth-buffer sampling.
     /// </summary>
+    /// <example>
+    /// <code>
+    /// var ssao = new SSAOPass();
+    /// ssao.Radius = 1.0f;
+    /// ssao.Intensity = 1.5f;
+    /// ssao.OnSetup(ctx);
+    /// ssao.OnRender(ctx);
+    /// </code>
+    /// </example>
     public sealed class SSAOPass : Phenotype.PostFx.Ports.IPostFxPass
     {
+        /// <summary>
+        /// Gets the stable name of this pass.
+        /// </summary>
+        /// <value>"SSAO".</value>
         public string Name => "SSAO";
+
+        /// <summary>
+        /// Gets the relative cost hint.
+        /// </summary>
+        /// <value>0.25f (quarter-frame cost estimate).</value>
         public float Cost => 0.25f;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this pass is enabled.
+        /// </summary>
+        /// <value>
+        /// <see langword="true"/> if the pass is enabled; otherwise, <see langword="false"/>.
+        /// Default is <see langword="true"/>.
+        /// </value>
         public bool IsEnabled { get; set; } = true;
 
+        /// <summary>
+        /// Gets or sets the world-space radius of the SSAO sampling sphere.
+        /// </summary>
+        /// <value>The radius. Default is 0.5f.</value>
         public float Radius { get; set; } = 0.5f;
+
+        /// <summary>
+        /// Gets or sets the intensity multiplier for the occlusion mask.
+        /// </summary>
+        /// <value>The intensity. Default is 1.2f.</value>
         public float Intensity { get; set; } = 1.2f;
+
+        /// <summary>
+        /// Gets or sets the depth bias to avoid self-occlusion artifacts.
+        /// </summary>
+        /// <value>The bias. Default is 0.04f.</value>
         public float Bias { get; set; } = 0.04f;
+
+        /// <summary>
+        /// Gets or sets the number of samples in the SSAO kernel.
+        /// </summary>
+        /// <value>The kernel size. Default is 8.</value>
         public int KernelSize { get; set; } = 8;
 
+        /// <summary>
+        /// Gets the material for this pass, or <see langword="null"/> if the shader was not found.
+        /// </summary>
+        /// <value>The <see cref="Material"/> instance.</value>
         public Material? Material => _material;
 
         Material? _material;
@@ -43,6 +92,10 @@ namespace Phenotype.PostFx
         const string ShaderName = "Hidden/Phenotype/SSAOPass";
         const string PassKeyword = "SSAOPASS";
 
+        /// <summary>
+        /// Creates the material and builds the sample kernel if needed.
+        /// </summary>
+        /// <param name="ctx">Per-camera context (ignored in this implementation).</param>
         public void OnSetup(PostFxContext ctx)
         {
             if (_material == null)
@@ -60,6 +113,10 @@ namespace Phenotype.PostFx
             ApplyParams();
         }
 
+        /// <summary>
+        /// Renders the SSAO pass from <c>ctx.Source</c> to <c>ctx.Destination</c>.
+        /// </summary>
+        /// <param name="ctx">Per-camera context containing source and destination render targets.</param>
         public void OnRender(PostFxContext ctx)
         {
             if (_material == null) return;
@@ -68,6 +125,9 @@ namespace Phenotype.PostFx
             Graphics.Blit(ctx.Source, ctx.Destination, _material);
         }
 
+        /// <summary>
+        /// Destroys the material and resets internal state.
+        /// </summary>
         public void OnDispose()
         {
             if (_material != null)
@@ -77,6 +137,13 @@ namespace Phenotype.PostFx
             }
         }
 
+        /// <summary>
+        /// Validates that the required shader variant is available.
+        /// </summary>
+        /// <param name="shaderProvider">The provider to query for shader availability.</param>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when the shader variant is unavailable.
+        /// </exception>
         public void ValidateVariants(Phenotype.PostFx.Ports.IShaderAvailabilityProvider shaderProvider)
         {
             if (!shaderProvider.IsAvailable(ShaderName, PassKeyword))
@@ -88,6 +155,7 @@ namespace Phenotype.PostFx
         /// Samples are distributed on a unit disk and scaled so that inner samples
         /// are closer to the origin and outer samples are farther away.
         /// </summary>
+        /// <param name="size">The number of samples in the kernel.</param>
         public void BuildKernel(int size)
         {
             _kernel = new Vector4[size];

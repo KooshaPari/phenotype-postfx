@@ -14,13 +14,30 @@ namespace Phenotype.PostFx.Ports
     /// </summary>
     public interface IShaderAvailabilityProvider
     {
-        /// <summary>True if the named shader is loaded and the keyword <paramref name="keyword"/> is supported.</summary>
+        /// <summary>
+        /// Determines whether a shader with the specified name and keyword is available.
+        /// </summary>
+        /// <param name="shaderName">The name of the shader to check.</param>
+        /// <param name="keyword">The shader keyword variant to validate.</param>
+        /// <returns>
+        /// <see langword="true"/> if the shader is loaded and the keyword is supported;
+        /// otherwise, <see langword="false"/>.
+        /// </returns>
         bool IsAvailable(string shaderName, string keyword);
     }
 
-    /// <summary>Default implementation that always returns true (built-in render pipeline).</summary>
+    /// <summary>
+    /// Default implementation that always returns <see langword="true"/>.
+    /// Suitable for built-in render pipelines where all shader variants are guaranteed.
+    /// </summary>
     public sealed class DefaultShaderAvailabilityProvider : IShaderAvailabilityProvider
     {
+        /// <summary>
+        /// Always returns <see langword="true"/>.
+        /// </summary>
+        /// <param name="shaderName">The name of the shader (ignored).</param>
+        /// <param name="keyword">The shader keyword (ignored).</param>
+        /// <returns><see langword="true"/>.</returns>
         public bool IsAvailable(string shaderName, string keyword) => true;
     }
 }
