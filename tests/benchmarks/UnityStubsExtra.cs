@@ -6,8 +6,6 @@
 
 namespace UnityEngine
 {
-    public sealed class MaterialPropertyBlock { }
-
     public struct Color
     {
         public float r, g, b, a;

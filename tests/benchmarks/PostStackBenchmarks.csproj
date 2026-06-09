@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <RootNamespace>Phenotype.PostFx.Benchmarks</RootNamespace>
   </PropertyGroup>
 
@@ -20,6 +21,8 @@
     <Compile Include="../../Runtime/Ports/IPostFxPass.cs" />
     <Compile Include="../../Runtime/Ports/IShaderAvailabilityProvider.cs" />
     <Compile Include="../PostStackVariantTests/UnityStubs.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="PostStackBenchmarks.cs" />
     <Compile Include="UnityStubsExtra.cs" />
   </ItemGroup>
 </Project>
