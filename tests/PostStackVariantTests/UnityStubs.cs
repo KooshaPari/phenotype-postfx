@@ -76,6 +76,10 @@ namespace UnityEngine
     {
         public string name { get; set; } = "GameObject";
         public Transform transform { get; } = new Transform();
+
+        public GameObject() { }
+        public GameObject(string name) { this.name = name; }
+
         public T AddComponent<T>() where T : Component => (T)Activator.CreateInstance(typeof(T))!;
         public T? GetComponent<T>() where T : Component => null;
     }

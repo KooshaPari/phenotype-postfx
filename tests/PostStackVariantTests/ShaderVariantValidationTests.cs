@@ -123,7 +123,7 @@ namespace Phenotype.PostFx.Tests
             Application.logMessageReceived -= OnLogMessage;
             foreach (var go in _gameObjects)
             {
-                Object.DestroyImmediate(go);
+                UnityEngine.Object.DestroyImmediate(go);
             }
             _gameObjects.Clear();
         }
@@ -340,7 +340,7 @@ namespace Phenotype.PostFx.Tests
         [Test]
         public void SharedBlitHelper_EnabledAndSupported_EmitsMaterialBlit()
         {
-            var stack = CreateStack(MockAvailabilityProvider.AllAvailable());
+            var stack = (PostStack)Activator.CreateInstance(typeof(PostStack))!;
             var material = new Material(new Shader());
             var src = new RenderTexture { width = 64, height = 64 };
             var dst = new RenderTexture { width = 64, height = 64 };
@@ -359,7 +359,7 @@ namespace Phenotype.PostFx.Tests
         [Test]
         public void SharedBlitHelper_Unsupported_SkipsMaterialBlit()
         {
-            var stack = CreateStack(MockAvailabilityProvider.AllAvailable());
+            var stack = (PostStack)Activator.CreateInstance(typeof(PostStack))!;
             var material = new Material(new Shader());
             var src = new RenderTexture { width = 64, height = 64 };
             var dst = new RenderTexture { width = 64, height = 64 };
