@@ -1,4 +1,4 @@
-// xDD: xUnit tests for PostStack shader-variant validation.
+// Unity Test Framework (NUnit) tests for PostStack shader-variant validation.
 //
 // Covers three scenarios:
 //   1. AllSupported  — provider says every effect is available → no warnings emitted
@@ -9,11 +9,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using NUnit.Framework;
 using Phenotype.PostFx;
 using UnityEngine;
-using Xunit;
 
-namespace PostStackVariantTests
+namespace Phenotype.PostFx.Tests
 {
     // -------------------------------------------------------------------------
     // Helpers
@@ -76,23 +76,6 @@ namespace PostStackVariantTests
     }
 
     /// <summary>
-    /// Creates a bare PostStack (no MonoBehaviour lifecycle) and drives
-    /// ValidateShaderVariants() directly.
-    /// </summary>
-    static class PostStackFactory
-    {
-        public static PostStack Create(IShaderAvailabilityProvider provider)
-        {
-            // Activator bypasses the MonoBehaviour constructor restriction in stubs
-            var stack = (PostStack)System.Activator.CreateInstance(typeof(PostStack))!;
-            stack.SetAvailabilityProvider(provider);
-            // Drive validation directly (no Awake / Unity lifecycle needed)
-            stack.ValidateShaderVariants();
-            return stack;
-        }
-    }
-
-    /// <summary>
     /// Reflection helper for exercising private render-path details without
     /// changing the public API.
     /// </summary>
@@ -120,62 +103,92 @@ namespace PostStackVariantTests
     // Tests
     // -------------------------------------------------------------------------
 
+    [TestFixture]
     public sealed class ShaderVariantValidationTests
     {
-        // Before each test, clear the captured warning list.
-        public ShaderVariantValidationTests()
+        List<GameObject> _gameObjects = new();
+        List<string> _warnings = new();
+
+        [SetUp]
+        public void SetUp()
         {
-            DebugCapture.Clear();
-            GraphicsCapture.Clear();
+            _gameObjects.Clear();
+            _warnings.Clear();
+            Application.logMessageReceived += OnLogMessage;
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            Application.logMessageReceived -= OnLogMessage;
+            foreach (var go in _gameObjects)
+            {
+                Object.DestroyImmediate(go);
+            }
+            _gameObjects.Clear();
+        }
+
+        void OnLogMessage(string condition, string stacktrace, LogType type)
+        {
+            if (type == LogType.Warning)
+                _warnings.Add(condition);
+        }
+
+        PostStack CreateStack(IShaderAvailabilityProvider provider)
+        {
+            var go = new GameObject("TestStack");
+            _gameObjects.Add(go);
+            var stack = go.AddComponent<PostStack>();
+            stack.SetAvailabilityProvider(provider);
+            stack.ValidateShaderVariants();
+            return stack;
         }
 
         // ------------------------------------------------------------------
         // Scenario 1: all supported — no warnings
         // ------------------------------------------------------------------
 
-        [Fact]
+        [Test]
         public void AllSupported_NoWarningsEmitted()
         {
-            var stack = PostStackFactory.Create(MockAvailabilityProvider.AllAvailable());
-
-            Assert.Empty(DebugCapture.Warnings);
+            var stack = CreateStack(MockAvailabilityProvider.AllAvailable());
+            Assert.IsEmpty(_warnings);
         }
 
-        [Fact]
+        [Test]
         public void AllSupported_AllFlagsTrue()
         {
-            var stack = PostStackFactory.Create(MockAvailabilityProvider.AllAvailable());
+            var stack = CreateStack(MockAvailabilityProvider.AllAvailable());
 
-            Assert.True(PostStackReflection.GetBool(stack, "_ssaoSupported"),  "_ssaoSupported");
-            Assert.True(PostStackReflection.GetBool(stack, "_ssgiSupported"),  "_ssgiSupported");
-            Assert.True(PostStackReflection.GetBool(stack, "_bloomSupported"), "_bloomSupported");
-            Assert.True(PostStackReflection.GetBool(stack, "_acesSupported"),  "_acesSupported");
-            Assert.True(PostStackReflection.GetBool(stack, "_vignetteSupported"), "_vignetteSupported");
-            Assert.True(PostStackReflection.GetBool(stack, "_chromaticAberrationSupported"), "_chromaticAberrationSupported");
-            Assert.True(PostStackReflection.GetBool(stack, "_lutSupported"),   "_lutSupported");
+            Assert.IsTrue(PostStackReflection.GetBool(stack, "_ssaoSupported"),  "_ssaoSupported");
+            Assert.IsTrue(PostStackReflection.GetBool(stack, "_ssgiSupported"),  "_ssgiSupported");
+            Assert.IsTrue(PostStackReflection.GetBool(stack, "_bloomSupported"), "_bloomSupported");
+            Assert.IsTrue(PostStackReflection.GetBool(stack, "_acesSupported"),  "_acesSupported");
+            Assert.IsTrue(PostStackReflection.GetBool(stack, "_vignetteSupported"), "_vignetteSupported");
+            Assert.IsTrue(PostStackReflection.GetBool(stack, "_chromaticAberrationSupported"), "_chromaticAberrationSupported");
+            Assert.IsTrue(PostStackReflection.GetBool(stack, "_lutSupported"),   "_lutSupported");
         }
 
         // ------------------------------------------------------------------
         // Scenario 2: missing keywords → warning emitted
         // ------------------------------------------------------------------
 
-        [Fact]
+        [Test]
         public void MissingVariant_WarningEmittedForEachUnavailableEffect()
         {
-            var stack = PostStackFactory.Create(MockAvailabilityProvider.NoneAvailable());
+            var stack = CreateStack(MockAvailabilityProvider.NoneAvailable());
 
             // One warning per effect (7 total)
-            Assert.Equal(7, DebugCapture.Warnings.Count);
+            Assert.AreEqual(7, _warnings.Count);
         }
 
-        [Theory]
-        [InlineData(PostFxEffect.SSAO,  "ScreenSpaceAO")]
-        [InlineData(PostFxEffect.SSGI,  "ScreenSpaceGI")]
-        [InlineData(PostFxEffect.Bloom, "BrpBloom")]
-        [InlineData(PostFxEffect.ACES,  "BrpACES")]
-        [InlineData(PostFxEffect.Vignette, "Vignette")]
-        [InlineData(PostFxEffect.ChromaticAberration, "ChromaticAberration")]
-        [InlineData(PostFxEffect.LUT,   "ColorGradingLUT")]
+        [TestCase(PostFxEffect.SSAO,  "ScreenSpaceAO")]
+        [TestCase(PostFxEffect.SSGI,  "ScreenSpaceGI")]
+        [TestCase(PostFxEffect.Bloom, "BrpBloom")]
+        [TestCase(PostFxEffect.ACES,  "BrpACES")]
+        [TestCase(PostFxEffect.Vignette, "Vignette")]
+        [TestCase(PostFxEffect.ChromaticAberration, "ChromaticAberration")]
+        [TestCase(PostFxEffect.LUT,   "ColorGradingLUT")]
         public void MissingVariant_WarningContainsShaderName(PostFxEffect effect, string shaderName)
         {
             // Only mark the one effect as unavailable
@@ -191,34 +204,33 @@ namespace PostStackVariantTests
             };
             map[effect] = false;
 
-            var stack = PostStackFactory.Create(new MockAvailabilityProvider(map));
+            var stack = CreateStack(new MockAvailabilityProvider(map));
 
-            Assert.Single(DebugCapture.Warnings);
-            Assert.Contains(shaderName, DebugCapture.Warnings[0]);
-            Assert.Contains("[PostStack]", DebugCapture.Warnings[0]);
+            Assert.AreEqual(1, _warnings.Count);
+            StringAssert.Contains(shaderName, _warnings[0]);
+            StringAssert.Contains("[PostStack]", _warnings[0]);
         }
 
-        [Fact]
+        [Test]
         public void MissingVariant_WarningMentionsShadervariants()
         {
-            var stack = PostStackFactory.Create(MockAvailabilityProvider.NoneAvailable());
+            var stack = CreateStack(MockAvailabilityProvider.NoneAvailable());
 
-            Assert.All(DebugCapture.Warnings,
-                w => Assert.Contains("shadervariants", w));
+            foreach (var w in _warnings)
+                StringAssert.Contains("shadervariants", w);
         }
 
         // ------------------------------------------------------------------
         // Scenario 3: graceful-skip — support flags are false for unavailable
         // ------------------------------------------------------------------
 
-        [Theory]
-        [InlineData(PostFxEffect.SSAO,  "_ssaoSupported")]
-        [InlineData(PostFxEffect.SSGI,  "_ssgiSupported")]
-        [InlineData(PostFxEffect.Bloom, "_bloomSupported")]
-        [InlineData(PostFxEffect.ACES,  "_acesSupported")]
-        [InlineData(PostFxEffect.Vignette, "_vignetteSupported")]
-        [InlineData(PostFxEffect.ChromaticAberration, "_chromaticAberrationSupported")]
-        [InlineData(PostFxEffect.LUT,   "_lutSupported")]
+        [TestCase(PostFxEffect.SSAO,  "_ssaoSupported")]
+        [TestCase(PostFxEffect.SSGI,  "_ssgiSupported")]
+        [TestCase(PostFxEffect.Bloom, "_bloomSupported")]
+        [TestCase(PostFxEffect.ACES,  "_acesSupported")]
+        [TestCase(PostFxEffect.Vignette, "_vignetteSupported")]
+        [TestCase(PostFxEffect.ChromaticAberration, "_chromaticAberrationSupported")]
+        [TestCase(PostFxEffect.LUT,   "_lutSupported")]
         public void GracefulSkip_UnavailableEffect_FlagSetFalse(PostFxEffect effect, string flagField)
         {
             var map = new Dictionary<PostFxEffect, bool>
@@ -233,19 +245,18 @@ namespace PostStackVariantTests
             };
             map[effect] = false;
 
-            var stack = PostStackFactory.Create(new MockAvailabilityProvider(map));
+            var stack = CreateStack(new MockAvailabilityProvider(map));
 
-            Assert.False(PostStackReflection.GetBool(stack, flagField),
+            Assert.IsFalse(PostStackReflection.GetBool(stack, flagField),
                 $"{flagField} should be false when effect is unavailable");
         }
 
-        [Theory]
-        [InlineData(PostFxEffect.SSAO)]
-        [InlineData(PostFxEffect.SSGI)]
-        [InlineData(PostFxEffect.Bloom)]
-        [InlineData(PostFxEffect.ACES)]
-        [InlineData(PostFxEffect.ChromaticAberration)]
-        [InlineData(PostFxEffect.LUT)]
+        [TestCase(PostFxEffect.SSAO)]
+        [TestCase(PostFxEffect.SSGI)]
+        [TestCase(PostFxEffect.Bloom)]
+        [TestCase(PostFxEffect.ACES)]
+        [TestCase(PostFxEffect.ChromaticAberration)]
+        [TestCase(PostFxEffect.LUT)]
         public void GracefulSkip_OtherEffectsUnaffected(PostFxEffect unavailableEffect)
         {
             var map = new Dictionary<PostFxEffect, bool>
@@ -260,7 +271,7 @@ namespace PostStackVariantTests
             };
             map[unavailableEffect] = false;
 
-            var stack = PostStackFactory.Create(new MockAvailabilityProvider(map));
+            var stack = CreateStack(new MockAvailabilityProvider(map));
 
             // All other support flags must remain true
             var allFlags = new[]
@@ -276,26 +287,26 @@ namespace PostStackVariantTests
             foreach (var (e, flag) in allFlags)
             {
                 if (e == unavailableEffect) continue;
-                Assert.True(PostStackReflection.GetBool(stack, flag),
+                Assert.IsTrue(PostStackReflection.GetBool(stack, flag),
                     $"{flag} should still be true when only {unavailableEffect} is unavailable");
             }
         }
 
-        [Fact]
+        [Test]
         public void GracefulSkip_AllUnavailable_AllFlagsFalse()
         {
-            var stack = PostStackFactory.Create(MockAvailabilityProvider.NoneAvailable());
+            var stack = CreateStack(MockAvailabilityProvider.NoneAvailable());
 
-            Assert.False(PostStackReflection.GetBool(stack, "_ssaoSupported"),  "_ssaoSupported");
-            Assert.False(PostStackReflection.GetBool(stack, "_ssgiSupported"),  "_ssgiSupported");
-            Assert.False(PostStackReflection.GetBool(stack, "_bloomSupported"), "_bloomSupported");
-            Assert.False(PostStackReflection.GetBool(stack, "_acesSupported"),  "_acesSupported");
-            Assert.False(PostStackReflection.GetBool(stack, "_vignetteSupported"), "_vignetteSupported");
-            Assert.False(PostStackReflection.GetBool(stack, "_chromaticAberrationSupported"), "_chromaticAberrationSupported");
-            Assert.False(PostStackReflection.GetBool(stack, "_lutSupported"),   "_lutSupported");
+            Assert.IsFalse(PostStackReflection.GetBool(stack, "_ssaoSupported"),  "_ssaoSupported");
+            Assert.IsFalse(PostStackReflection.GetBool(stack, "_ssgiSupported"),  "_ssgiSupported");
+            Assert.IsFalse(PostStackReflection.GetBool(stack, "_bloomSupported"), "_bloomSupported");
+            Assert.IsFalse(PostStackReflection.GetBool(stack, "_acesSupported"),  "_acesSupported");
+            Assert.IsFalse(PostStackReflection.GetBool(stack, "_vignetteSupported"), "_vignetteSupported");
+            Assert.IsFalse(PostStackReflection.GetBool(stack, "_chromaticAberrationSupported"), "_chromaticAberrationSupported");
+            Assert.IsFalse(PostStackReflection.GetBool(stack, "_lutSupported"),   "_lutSupported");
         }
 
-        [Fact]
+        [Test]
         public void SourceSurface_ExposesVignetteFieldAndEnumMember()
         {
             var field = typeof(PostStack).GetField(
@@ -303,12 +314,12 @@ namespace PostStackVariantTests
                 System.Reflection.BindingFlags.Public |
                 System.Reflection.BindingFlags.Instance);
 
-            Assert.NotNull(field);
-            Assert.Equal(typeof(bool), field!.FieldType);
-            Assert.Contains("Vignette", System.Enum.GetNames(typeof(PostFxEffect)));
+            Assert.IsNotNull(field);
+            Assert.AreEqual(typeof(bool), field!.FieldType);
+            Assert.That(System.Enum.GetNames(typeof(PostFxEffect)), Does.Contain("Vignette"));
         }
 
-        [Fact]
+        [Test]
         public void SourceSurface_ExposesChromaticAberrationFieldAndEnumMember()
         {
             var field = typeof(PostStack).GetField(
@@ -316,15 +327,20 @@ namespace PostStackVariantTests
                 System.Reflection.BindingFlags.Public |
                 System.Reflection.BindingFlags.Instance);
 
-            Assert.NotNull(field);
-            Assert.Equal(typeof(bool), field!.FieldType);
-            Assert.Contains("ChromaticAberration", System.Enum.GetNames(typeof(PostFxEffect)));
+            Assert.IsNotNull(field);
+            Assert.AreEqual(typeof(bool), field!.FieldType);
+            Assert.That(System.Enum.GetNames(typeof(PostFxEffect)), Does.Contain("ChromaticAberration"));
         }
 
-        [Fact]
+#if !UNITY_2021_3_OR_NEWER
+        // ------------------------------------------------------------------
+        // Blit helper tests — only run in stub environment (dotnet test)
+        // ------------------------------------------------------------------
+
+        [Test]
         public void SharedBlitHelper_EnabledAndSupported_EmitsMaterialBlit()
         {
-            var stack = (PostStack)Activator.CreateInstance(typeof(PostStack))!;
+            var stack = CreateStack(MockAvailabilityProvider.AllAvailable());
             var material = new Material(new Shader());
             var src = new RenderTexture { width = 64, height = 64 };
             var dst = new RenderTexture { width = 64, height = 64 };
@@ -337,13 +353,13 @@ namespace PostStackVariantTests
             GraphicsCapture.Clear();
             PostStackRuntimeReflection.InvokeOnRenderImage(stack, src, dst);
 
-            Assert.Contains(GraphicsCapture.Blits, call => call.Material == material);
+            Assert.IsTrue(GraphicsCapture.Blits.Any(call => call.Material == material));
         }
 
-        [Fact]
+        [Test]
         public void SharedBlitHelper_Unsupported_SkipsMaterialBlit()
         {
-            var stack = (PostStack)Activator.CreateInstance(typeof(PostStack))!;
+            var stack = CreateStack(MockAvailabilityProvider.AllAvailable());
             var material = new Material(new Shader());
             var src = new RenderTexture { width = 64, height = 64 };
             var dst = new RenderTexture { width = 64, height = 64 };
@@ -356,27 +372,28 @@ namespace PostStackVariantTests
             GraphicsCapture.Clear();
             PostStackRuntimeReflection.InvokeOnRenderImage(stack, src, dst);
 
-            Assert.DoesNotContain(GraphicsCapture.Blits, call => call.Material == material);
+            Assert.IsFalse(GraphicsCapture.Blits.Any(call => call.Material == material));
         }
+#endif
 
         // ------------------------------------------------------------------
         // Idempotency: calling ValidateShaderVariants twice doesn't double-warn
         // ------------------------------------------------------------------
 
-        [Fact]
+        [Test]
         public void ValidateShaderVariants_Idempotent_NoDoubleWarnings()
         {
             var provider = MockAvailabilityProvider.NoneAvailable();
-            var stack = PostStackFactory.Create(provider);
+            var stack = CreateStack(provider);
 
-            int countAfterFirst = DebugCapture.Warnings.Count;
+            int countAfterFirst = _warnings.Count;
 
             // Call again
             stack.ValidateShaderVariants();
 
             // Warnings doubled (each call warns independently — that is the
             // expected behaviour: each re-init re-audits)
-            Assert.Equal(countAfterFirst * 2, DebugCapture.Warnings.Count);
+            Assert.AreEqual(countAfterFirst * 2, _warnings.Count);
         }
     }
 }

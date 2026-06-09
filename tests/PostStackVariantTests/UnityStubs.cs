@@ -5,6 +5,7 @@
 // Debug.LogWarning is wired to a thread-local capture list so tests can
 // assert on warnings without coupling to System.Console.
 
+using System;
 using System.Collections.Generic;
 
 #pragma warning disable CS8618  // Non-nullable field uninitialized (stubs)
@@ -56,6 +57,7 @@ namespace UnityEngine
     public class Object
     {
         public static void Destroy(Object obj) { }
+        public static void DestroyImmediate(Object obj) { }
     }
 
     public class Component : Object
@@ -67,6 +69,16 @@ namespace UnityEngine
     public class Behaviour : Component { }
 
     public class MonoBehaviour : Behaviour { }
+
+    public class Transform : Component { }
+
+    public class GameObject : Object
+    {
+        public string name { get; set; } = "GameObject";
+        public Transform transform { get; } = new Transform();
+        public T AddComponent<T>() where T : Component => (T)Activator.CreateInstance(typeof(T))!;
+        public T? GetComponent<T>() where T : Component => null;
+    }
 
     public struct Vector2
     {
@@ -180,15 +192,50 @@ namespace UnityEngine
         public static float Max(float a, float b) => System.Math.Max(a, b);
     }
 
+    public enum LogType { Error, Assert, Warning, Log, Exception }
+
+    public interface ILogHandler
+    {
+        void LogFormat(LogType logType, Object context, string format, params object[] args);
+        void LogException(Exception exception, Object context);
+    }
+
+    public class DefaultLogHandler : ILogHandler
+    {
+        public void LogFormat(LogType logType, Object context, string format, params object[] args) { }
+        public void LogException(Exception exception, Object context) { }
+    }
+
+    public class Logger
+    {
+        public ILogHandler logHandler { get; set; } = new DefaultLogHandler();
+    }
+
     public static class Debug
     {
+        public static Logger unityLogger { get; } = new Logger { logHandler = new DefaultLogHandler() };
+
         public static void LogWarning(object msg)
         {
             DebugCapture.Add(msg?.ToString() ?? string.Empty);
+            Application.LogMessageReceived(msg?.ToString() ?? string.Empty, "", LogType.Warning);
+            unityLogger.logHandler?.LogFormat(LogType.Warning, null, "{0}", msg);
         }
 
         public static void Log(object msg) { }
         public static void LogError(object msg) { }
+    }
+
+    public static class Application
+    {
+        public static event Action<string, string, LogType>? logMessageReceived;
+        public static event Action<string, string, LogType>? logMessageReceivedThreaded;
+
+        internal static void LogMessageReceived(string condition, string stacktrace, LogType type)
+        {
+            logMessageReceived?.Invoke(condition, stacktrace, type);
+            logMessageReceivedThreaded?.Invoke(condition, stacktrace, type);
+        }
     }
 
     // -----------------------------------------------------------------------
