@@ -19,6 +19,9 @@ namespace Phenotype.PostFx
         /// <summary>Material used for this pass. Null if the shader is unavailable.</summary>
         Material? Material { get; }
 
+        /// <summary>Bind the owning PostStack (hexagonal port: the provider needs a back-reference to the camera driver).</summary>
+        void BindOwner(PostStack owner);
+
         /// <summary>Whether the pass is currently enabled by the user.</summary>
         bool IsEnabled(PostStack owner);
 
