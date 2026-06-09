@@ -49,7 +49,7 @@ namespace Phenotype.PostFx
 
         public PostFxEffect Effect { get; }
         public string DisplayName { get; }
-        public Material? Material => _materialAccessor(_owner);
+        public Material? Material => _owner != null ? _materialAccessor(_owner) : null;
 
         PostStack _owner;
 
@@ -179,6 +179,19 @@ namespace Phenotype.PostFx
         {
             _providers.TryGetValue(effect, out var provider);
             return provider;
+        }
+
+        /// <summary>
+        /// Bind all providers that require an owner reference to the given stack.
+        /// Call after construction or after replacing the registry.
+        /// </summary>
+        public void BindOwner(PostStack owner)
+        {
+            foreach (var p in _providers.Values)
+            {
+                if (p is BlitPassProvider bp) bp.BindOwner(owner);
+                else if (p is BloomPassProvider bloom) bloom.BindOwner(owner);
+            }
         }
 
         /// <summary>True if any registered pass is active for the given owner.</summary>

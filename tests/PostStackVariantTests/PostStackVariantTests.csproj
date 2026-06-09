@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -22,5 +23,6 @@
   <!-- Compile the real PostStack source (along with Unity stubs provided here) -->
   <ItemGroup>
     <Compile Include="../../Runtime/PostStack.cs" />
+    <Compile Include="../../Runtime/PostFxPassRegistry.cs" />
   </ItemGroup>
 </Project>

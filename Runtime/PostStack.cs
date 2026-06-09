@@ -131,13 +131,13 @@ namespace Phenotype.PostFx
         static bool _kernelsBuilt;
 
         // Validated availability flags — set by ValidateShaderVariants()
-        bool _ssaoSupported;
-        bool _ssgiSupported;
-        bool _bloomSupported;
-        bool _acesSupported;
-        bool _vignetteSupported;
-        bool _chromaticAberrationSupported;
-        bool _lutSupported;
+        internal bool _ssaoSupported;
+        internal bool _ssgiSupported;
+        internal bool _bloomSupported;
+        internal bool _acesSupported;
+        internal bool _vignetteSupported;
+        internal bool _chromaticAberrationSupported;
+        internal bool _lutSupported;
 
         /// <summary>
         /// Injectable shader-availability provider.  Defaults to the production
@@ -150,6 +150,13 @@ namespace Phenotype.PostFx
         /// custom post-processing passes without modifying PostStack.
         /// </summary>
         public PostFxPassRegistry PassRegistry { get; private set; } = PostFxPassRegistry.CreateDefault();
+
+        // BindOwner so providers that cache the owner (e.g. BlitPassProvider)
+        // have it before Awake/InitMaterials run.
+        public PostStack()
+        {
+            PassRegistry.BindOwner(this);
+        }
 
         // ------------------------------------------------------------------
         // Public API for test injection
@@ -292,7 +299,7 @@ namespace Phenotype.PostFx
             return shader != null ? new Material(shader) : null;
         }
 
-        void ApplySSAOParams()
+        internal void ApplySSAOParams()
         {
             _ssaoMat.SetInt("_SampleCount", SSAOSamples);
             _ssaoMat.SetVectorArray("_Samples", _ssaoKernel);
@@ -301,7 +308,7 @@ namespace Phenotype.PostFx
             _ssaoMat.SetFloat("_Intensity", SSAOIntensity);
         }
 
-        void ApplySSGIParams()
+        internal void ApplySSGIParams()
         {
             _ssgiMat.SetInt("_SampleCount", SSGISamples);
             _ssgiMat.SetVectorArray("_Samples", _ssgiKernel);
@@ -309,12 +316,12 @@ namespace Phenotype.PostFx
             _ssgiMat.SetFloat("_Intensity", SSGIIntensity);
         }
 
-        void ApplyACESParams()
+        internal void ApplyACESParams()
         {
             _acesMat.SetFloat(ExposureId, Exposure);
         }
 
-        void ApplyVignetteParams()
+        internal void ApplyVignetteParams()
         {
             _vignetteMat.SetVector("_Center", new Vector4(VignetteCenter.x, VignetteCenter.y, 0f, 0f));
             _vignetteMat.SetFloat("_Intensity", VignetteIntensity);
@@ -322,7 +329,7 @@ namespace Phenotype.PostFx
             _vignetteMat.SetFloat("_Roundness", VignetteRoundness);
         }
 
-        void ApplyChromaticAberrationParams()
+        internal void ApplyChromaticAberrationParams()
         {
             _chromaticAberrationMat.SetFloat("_Intensity", ChromaticAberrationIntensity);
         }

@@ -1,5 +1,14 @@
 # phenotype-postfx
 
+## State
+
+Progress: `[███████░░░] 70%` — post-FX stack extracted from WSM3D, registry refactor merged.
+
+_Updated 2026-06-08 — audit pass._
+
+[![CI](https://github.com/KooshaPari/phenotype-postfx/actions/workflows/ci.yml/badge.svg)](https://github.com/KooshaPari/phenotype-postfx/actions)
+[![License](https://img.shields.io/github/license/KooshaPari/phenotype-postfx)](LICENSE)
+
 Reusable BRP post-processing stack for Unity. Deterministic SSAO → SSGI → Bloom → ACES tonemap → LUT color grading chain via `OnRenderImage`.
 
 ## Usage
@@ -53,3 +62,19 @@ magenta shader at runtime.
 ## Origin
 
 Extracted from [WorldSphereMod3D](https://github.com/KooshaPari/WorldSphereMod) WSM3DPostStack.
+
+## Description
+
+Reusable BRP post-processing stack for Unity, extracted from WorldSphereMod3D. Deterministic SSAO/SSGI/Bloom/ACES/LUT chain via `OnRenderImage` with a composable registry.
+
+## Install
+
+Drop `Runtime/` into your Unity Assets folder (Built-In Render Pipeline, 2021.3+). Add the `PostStack` component to your main camera.
+
+## Contributing
+
+PRs welcome. See `CONTRIBUTING.md` (Phenotype-org standard). New passes go through `PostFxPassRegistry`; follow the existing `IPostFxPass` contract.
+
+## License
+
+MIT — see [`LICENSE`](./LICENSE).
