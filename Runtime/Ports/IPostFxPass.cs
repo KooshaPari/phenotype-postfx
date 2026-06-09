@@ -100,11 +100,11 @@ namespace Phenotype.PostFx.Ports
         {
             _provider = provider ?? throw new ArgumentNullException(nameof(provider));
             _owner = owner ?? throw new ArgumentNullException(nameof(owner));
-            _provider.BindOwner(owner);
+            _provider.Init(owner);
         }
 
         public void OnSetup(PostFxContext ctx) { /* providers handle their own state */ }
-        public void OnRender(PostFxContext ctx) => _provider.Render(_owner, ctx.Source, ctx.Destination);
+        public void OnRender(PostFxContext ctx) => _provider.Render(ctx.Source, ctx.Destination);
         public void OnDispose() { /* providers own their materials */ }
         public void ValidateVariants(IShaderAvailabilityProvider p)
         {

@@ -8,7 +8,7 @@ namespace Phenotype.PostFx
     /// third-party effect, mod extension) implements this to register itself
     /// with the <see cref="PostFxPassRegistry"/>.
     /// </summary>
-    public interface IPostFxPassProvider
+    public interface IPostFxPassProvider : IPostFxPass
     {
         /// <summary>Unique identifier for this pass provider.</summary>
         PostFxEffect Effect { get; }
@@ -19,9 +19,6 @@ namespace Phenotype.PostFx
         /// <summary>Material used for this pass. Null if the shader is unavailable.</summary>
         Material? Material { get; }
 
-        /// <summary>Bind the owning PostStack (hexagonal port: the provider needs a back-reference to the camera driver).</summary>
-        void BindOwner(PostStack owner);
-
         /// <summary>Whether the pass is currently enabled by the user.</summary>
         bool IsEnabled(PostStack owner);
 
@@ -30,12 +27,6 @@ namespace Phenotype.PostFx
 
         /// <summary>Apply per-frame parameters before blit.</summary>
         void ApplyParams(PostStack owner);
-
-        /// <summary>
-        /// Execute custom render logic (e.g. Bloom multi-pass). Return true
-        /// if the pass wrote to <paramref name="dst"/>.
-        /// </summary>
-        bool Render(PostStack owner, RenderTexture src, RenderTexture dst);
     }
 
     /// <summary>
@@ -74,20 +65,22 @@ namespace Phenotype.PostFx
             _applyParams = applyParams;
         }
 
-        public void BindOwner(PostStack owner) => _owner = owner;
+        public void Init(PostStack owner) => _owner = owner;
 
         public bool IsEnabled(PostStack owner) => _enabledAccessor(owner);
         public bool IsSupported(PostStack owner) => _supportedAccessor(owner);
 
         public void ApplyParams(PostStack owner) => _applyParams(owner);
 
-        public bool Render(PostStack owner, RenderTexture src, RenderTexture dst)
+        public bool Render(RenderTexture src, RenderTexture dst)
         {
             var mat = Material;
             if (mat == null) return false;
             Graphics.Blit(src, dst, mat);
             return true;
         }
+
+        public void Dispose() { }
     }
 
     /// <summary>
@@ -102,16 +95,16 @@ namespace Phenotype.PostFx
         public Material? Material => _owner?._bloomMat;
 
         PostStack _owner;
-        public void BindOwner(PostStack owner) => _owner = owner;
+        public void Init(PostStack owner) => _owner = owner;
 
         public bool IsEnabled(PostStack owner) => owner.EnableBloom;
         public bool IsSupported(PostStack owner) => owner._bloomSupported;
 
         public void ApplyParams(PostStack owner) { }
 
-        public bool Render(PostStack owner, RenderTexture src, RenderTexture dst)
+        public bool Render(RenderTexture src, RenderTexture dst)
         {
-            var bloomMat = owner._bloomMat;
+            var bloomMat = _owner?._bloomMat;
             if (bloomMat == null) return false;
 
             int w = Mathf.Max(1, src.width / 4);
@@ -134,6 +127,8 @@ namespace Phenotype.PostFx
                 RenderTexture.ReleaseTemporary(bB);
             }
         }
+
+        public void Dispose() { }
     }
 
     /// <summary>
@@ -185,16 +180,28 @@ namespace Phenotype.PostFx
         }
 
         /// <summary>
-        /// Bind all providers that require an owner reference to the given stack.
+        /// Initialise all providers that require an owner reference.
         /// Call after construction or after replacing the registry.
         /// </summary>
-        public void BindOwner(PostStack owner)
+        public void Init(PostStack owner)
         {
             foreach (var p in _providers.Values)
             {
-                if (p is BlitPassProvider bp) bp.BindOwner(owner);
-                else if (p is BloomPassProvider bloom) bloom.BindOwner(owner);
+                p.Init(owner);
             }
+        }
+
+        /// <summary>
+        /// Dispose all registered providers and clear the registry.
+        /// </summary>
+        public void Dispose()
+        {
+            foreach (var p in _providers.Values)
+            {
+                p.Dispose();
+            }
+            _providers.Clear();
+            _renderOrder.Clear();
         }
 
         /// <summary>True if any registered pass is active for the given owner.</summary>

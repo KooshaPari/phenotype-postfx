@@ -18,6 +18,7 @@
   <ItemGroup>
     <Compile Include="../../Runtime/PostStack.cs" />
     <Compile Include="../../Runtime/PostFxPassRegistry.cs" />
+    <Compile Include="../../Runtime/IPostFxPass.cs" />
     <Compile Include="../../Runtime/Ports/IPostFxPass.cs" />
     <Compile Include="../../Runtime/Ports/IShaderAvailabilityProvider.cs" />
     <Compile Include="../PostStackVariantTests/UnityStubs.cs" />

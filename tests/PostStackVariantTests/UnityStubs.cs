@@ -154,6 +154,7 @@ namespace UnityEngine
 
     public class Material : Object
     {
+        private readonly System.Collections.Generic.HashSet<string> _keywords = new();
         public Material(Shader s) { }
         public bool HasProperty(string name) => false;
         public bool HasProperty(int id) => false;
@@ -169,6 +170,10 @@ namespace UnityEngine
         public void SetFloat(int id, float v) { }
         public void SetVectorArray(string name, Vector4[] arr) { }
         public void SetVectorArray(int id, Vector4[] arr) { }
+
+        public void EnableKeyword(string keyword) => _keywords.Add(keyword);
+        public void DisableKeyword(string keyword) => _keywords.Remove(keyword);
+        public bool IsKeywordEnabled(string keyword) => _keywords.Contains(keyword);
 
         // Unity Material has an implicit bool conversion (non-null = true)
         public static implicit operator bool(Material? m) => m is not null;

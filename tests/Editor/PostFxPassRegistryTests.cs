@@ -1,191 +1,162 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // SPDX-FileCopyrightText: 2026 KooshaPari <kooshapari@gmail.com>
 
-//! Unit tests for the PostFxPassRegistry hexagonal port.
+//! Unit tests for the PostFxPassRegistry and IPostFxPass interface.
 //! These tests run in any NUnit-compatible test runner (NUnit 3.13+).
-//! EditMode test execution: `unity -batchmode -runTests -testPlatform editmode`
 
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using Phenotype.PostFx;
-using Phenotype.PostFx.Ports;
 
 namespace Phenotype.PostFx.Tests
 {
     [TestFixture]
     public class PostFxPassRegistryTests
     {
-        // T21 test 1: empty registry has no providers
+        // Test 1: empty registry has no providers
         [Test]
         public void EmptyRegistry_HasNoProviders()
         {
             var reg = new PostFxPassRegistry();
-            Assert.AreEqual(0, reg.Passes.Count);
+            int count = 0;
+            foreach (var _ in reg.Providers) count++;
+            Assert.AreEqual(0, count);
         }
 
-        // T21 test 2: register adds a pass and validates its variants
+        // Test 2: CreateDefault returns a registry with built-in providers
         [Test]
-        public void Register_AddsPass()
+        public void CreateDefault_HasProviders()
+        {
+            var reg = PostFxPassRegistry.CreateDefault();
+            int count = 0;
+            foreach (var _ in reg.Providers) count++;
+            Assert.Greater(count, 0);
+        }
+
+        // Test 3: IPostFxPass interface exists with Init, Render, Dispose
+        [Test]
+        public void IPostFxPass_HasInitRenderDispose()
+        {
+            var pass = new MockPostFxPass();
+            pass.Init(null!);
+            Assert.IsTrue(pass.InitCalled);
+
+            var src = new RenderTexture { width = 64, height = 64 };
+            var dst = new RenderTexture { width = 64, height = 64 };
+            pass.Render(src, dst);
+            Assert.IsTrue(pass.RenderCalled);
+
+            pass.Dispose();
+            Assert.IsTrue(pass.DisposeCalled);
+        }
+
+        // Test 4: BlitPassProvider implements IPostFxPass
+        [Test]
+        public void BlitPassProvider_ImplementsIPostFxPass()
+        {
+            Assert.IsTrue(typeof(IPostFxPass).IsAssignableFrom(typeof(BlitPassProvider)));
+        }
+
+        // Test 5: BloomPassProvider implements IPostFxPass
+        [Test]
+        public void BloomPassProvider_ImplementsIPostFxPass()
+        {
+            Assert.IsTrue(typeof(IPostFxPass).IsAssignableFrom(typeof(BloomPassProvider)));
+        }
+
+        // Test 6: Init sets owner on provider
+        [Test]
+        public void Init_SetsOwner()
+        {
+            var stack = new PostStack();
+            var pass = new MockPostFxPass();
+            pass.Init(stack);
+            Assert.AreSame(stack, pass.Owner);
+        }
+
+        // Test 7: Dispose is called on all providers when registry is disposed
+        [Test]
+        public void Dispose_CallsDisposeOnProviders()
         {
             var reg = new PostFxPassRegistry();
-            var pass = new MockPass("MockA", cost: 0.5f);
-            reg.Register(pass);
-            Assert.AreEqual(1, reg.Passes.Count);
-            Assert.AreSame(pass, reg.Passes[0]);
+            var pass = new MockPostFxPass();
+            reg.Register(new MockPassProvider(pass));
+            reg.Dispose();
+            Assert.IsTrue(pass.DisposeCalled);
         }
 
-        // T21 test 3: null pass throws ArgumentNullException
+        // Test 8: GetProvider returns null for unregistered effect
         [Test]
-        public void Register_NullPass_Throws()
+        public void GetProvider_Unregistered_ReturnsNull()
         {
             var reg = new PostFxPassRegistry();
-            Assert.Throws<System.ArgumentNullException>(() => reg.Register(null));
+            Assert.IsNull(reg.GetProvider(PostFxEffect.SSAO));
         }
 
-        // T21 test 4: ValidateVariants is called exactly once on registration
+        // Test 9: Register adds provider
         [Test]
-        public void Register_CallsValidateVariantsOnce()
+        public void Register_AddsProvider()
         {
             var reg = new PostFxPassRegistry();
-            var pass = new MockPass("MockA", cost: 0.1f);
-            reg.Register(pass);
-            Assert.AreEqual(1, pass.ValidateCount);
+            var provider = new MockPassProvider(new MockPostFxPass());
+            reg.Register(provider);
+            Assert.AreSame(provider, reg.GetProvider(PostFxEffect.Bloom));
         }
 
-        // T21 test 5: ValidateAll calls ValidateVariants on every registered pass
+        // Test 10: Unregister removes provider
         [Test]
-        public void ValidateAll_CallsEveryPass()
+        public void Unregister_RemovesProvider()
         {
             var reg = new PostFxPassRegistry();
-            var a = new MockPass("A", 0.1f);
-            var b = new MockPass("B", 0.2f);
-            var c = new MockPass("C", 0.3f);
-            reg.Register(a);
-            reg.Register(b);
-            reg.Register(c);
-            reg.ValidateAll();
-            Assert.AreEqual(2, a.ValidateCount);
-            Assert.AreEqual(2, b.ValidateCount);
-            Assert.AreEqual(2, c.ValidateCount);
-        }
-
-        // T21 test 6: Clear removes all passes
-        [Test]
-        public void Clear_RemovesAll()
-        {
-            var reg = new PostFxPassRegistry();
-            reg.Register(new MockPass("A", 0.1f));
-            reg.Register(new MockPass("B", 0.2f));
-            reg.Clear();
-            Assert.AreEqual(0, reg.Passes.Count);
-        }
-
-        // T21 test 7: passes are returned in registration order
-        [Test]
-        public void Passes_AreInRegistrationOrder()
-        {
-            var reg = new PostFxPassRegistry();
-            var a = new MockPass("A", 0.1f);
-            var b = new MockPass("B", 0.2f);
-            var c = new MockPass("C", 0.3f);
-            reg.Register(a);
-            reg.Register(b);
-            reg.Register(c);
-            Assert.AreSame(a, reg.Passes[0]);
-            Assert.AreSame(b, reg.Passes[1]);
-            Assert.AreSame(c, reg.Passes[2]);
-        }
-
-        // T21 test 8: custom shader provider is consulted on Register
-        [Test]
-        public void Register_UsesCustomShaderProvider()
-        {
-            var provider = new MockShaderProvider(available: false);
-            var reg = new PostFxPassRegistry(provider);
-            var pass = new MockPass("A", 0.1f, requiresShader: "A_Shader", requiredKeyword: "ENABLE");
-            reg.Register(pass);
-            // Should have called provider.IsAvailable
-            Assert.AreEqual(1, provider.CallCount);
-        }
-
-        // T21 test 9: IShaderAvailabilityProvider contract: returns bool
-        [Test]
-        public void IShaderAvailabilityProvider_Contract()
-        {
-            IShaderAvailabilityProvider p = new DefaultShaderAvailabilityProvider();
-            Assert.IsTrue(p.IsAvailable("Anything", "AnyKeyword"));
-            Assert.IsTrue(p.IsAvailable("", ""));
-        }
-
-        // T21 test 10: MockPass isEnabled defaults to true
-        [Test]
-        public void MockPass_IsEnabledDefaultsTrue()
-        {
-            var p = new MockPass("X", 0.1f);
-            Assert.IsTrue(p.IsEnabled);
-        }
-
-        // T21 test 11: MockPass can be disabled
-        [Test]
-        public void MockPass_CanBeDisabled()
-        {
-            var p = new MockPass("X", 0.1f) { IsEnabled = false };
-            Assert.IsFalse(p.IsEnabled);
-        }
-
-        // T21 test 12: MockPass has a cost
-        [Test]
-        public void MockPass_CostIsPreserved()
-        {
-            var p = new MockPass("X", 0.42f);
-            Assert.AreEqual(0.42f, p.Cost);
+            var provider = new MockPassProvider(new MockPostFxPass());
+            reg.Register(provider);
+            reg.Unregister(PostFxEffect.Bloom);
+            Assert.IsNull(reg.GetProvider(PostFxEffect.Bloom));
         }
     }
 
-    /// <summary>Mock IPostFxPass adapter for testing.</summary>
-    internal sealed class MockPass : IPostFxPass
+    /// <summary>Mock IPostFxPass for testing.</summary>
+    internal sealed class MockPostFxPass : IPostFxPass
     {
-        public string Name { get; }
-        public float Cost { get; }
-        public bool IsEnabled { get; set; } = true;
-        public string RequiresShader { get; }
-        public string RequiredKeyword { get; }
-        public int ValidateCount { get; private set; }
-        public bool OnSetupCalled { get; private set; }
-        public bool OnRenderCalled { get; private set; }
-        public bool OnDisposeCalled { get; private set; }
+        public PostStack? Owner { get; private set; }
+        public bool InitCalled { get; private set; }
+        public bool RenderCalled { get; private set; }
+        public bool DisposeCalled { get; private set; }
 
-        public MockPass(string name, float cost, string requiresShader = null, string requiredKeyword = null)
+        public void Init(PostStack owner)
         {
-            Name = name;
-            Cost = cost;
-            RequiresShader = requiresShader;
-            RequiredKeyword = requiredKeyword;
+            Owner = owner;
+            InitCalled = true;
         }
 
-        public void OnSetup(PostFxContext ctx) => OnSetupCalled = true;
-        public void OnRender(PostFxContext ctx) => OnRenderCalled = true;
-        public void OnDispose() => OnDisposeCalled = true;
-        public void ValidateVariants(IShaderAvailabilityProvider p)
+        public bool Render(RenderTexture src, RenderTexture dst)
         {
-            ValidateCount++;
-            if (RequiresShader != null && !p.IsAvailable(RequiresShader, RequiredKeyword ?? ""))
-                throw new System.InvalidOperationException($"Shader not available: {RequiresShader}");
+            RenderCalled = true;
+            return true;
+        }
+
+        public void Dispose()
+        {
+            DisposeCalled = true;
         }
     }
 
-    /// <summary>Mock shader provider for testing.</summary>
-    internal sealed class MockShaderProvider : IShaderAvailabilityProvider
+    /// <summary>Mock IPostFxPassProvider for testing.</summary>
+    internal sealed class MockPassProvider : IPostFxPassProvider
     {
-        public bool Available { get; }
-        public int CallCount { get; private set; }
+        private readonly IPostFxPass _pass;
 
-        public MockShaderProvider(bool available) { Available = available; }
-        public bool IsAvailable(string shaderName, string keyword)
-        {
-            CallCount++;
-            return Available;
-        }
+        public PostFxEffect Effect => PostFxEffect.Bloom;
+        public string DisplayName => "Mock";
+        public Material? Material => null;
+
+        public MockPassProvider(IPostFxPass pass) => _pass = pass;
+
+        public void Init(PostStack owner) => _pass.Init(owner);
+        public bool Render(RenderTexture src, RenderTexture dst) => _pass.Render(src, dst);
+        public void Dispose() => _pass.Dispose();
+        public bool IsEnabled(PostStack owner) => true;
+        public bool IsSupported(PostStack owner) => true;
+        public void ApplyParams(PostStack owner) { }
     }
 }

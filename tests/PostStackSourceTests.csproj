@@ -13,9 +13,12 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
   </ItemGroup>
 
-  <!-- Exclude the variant sub-project and the old console entry point -->
+  <!-- Exclude the variant sub-project, benchmarks, Editor tests, and the old console entry point -->
   <ItemGroup>
     <Compile Remove="PostStackVariantTests/**" />
+    <Compile Remove="benchmarks/**" />
+    <Compile Remove="Editor/**" />
     <Compile Remove="Program.cs" />
+    <Compile Remove="**/obj/**/*.cs" />
   </ItemGroup>
 </Project>

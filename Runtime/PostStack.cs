@@ -159,7 +159,7 @@ namespace Phenotype.PostFx
         // have it before Awake/InitMaterials run.
         public PostStack()
         {
-            PassRegistry.BindOwner(this);
+            PassRegistry.Init(this);
         }
 
         // ------------------------------------------------------------------
@@ -188,6 +188,7 @@ namespace Phenotype.PostFx
         {
             ReleaseMaterials();
             ReleasePingPong();
+            PassRegistry.Dispose();
         }
 
         static void BuildKernels()
@@ -394,7 +395,7 @@ namespace Phenotype.PostFx
                     }
 
                     effect.ApplyParams(this);
-                    if (effect.Render(this, cur, next))
+                    if (effect.Render(cur, next))
                     {
                         Swap(ref cur, ref next);
                     }

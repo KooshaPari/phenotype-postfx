@@ -11,7 +11,7 @@ using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using Phenotype.PostFx;
-using Phenotype.PostFx.Ports;
+using PostFxQuality = Phenotype.PostFx.Ports.PostFxQuality;
 using UnityEngine;
 
 namespace Phenotype.PostFx.Tests

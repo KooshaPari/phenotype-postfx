@@ -152,7 +152,7 @@ public class PostStackBenchmarks
         _stack = CreateStackWithMaterials();
         _stack.ValidateShaderVariants();
         _registry = PostFxPassRegistry.CreateDefault();
-        _registry.BindOwner(_stack);
+        _registry.Init(_stack);
         _src = new RenderTexture { width = 1920, height = 1080 };
         _dst = new RenderTexture { width = 1920, height = 1080 };
     }
@@ -172,7 +172,7 @@ public class PostStackBenchmarks
         var provider = _registry.GetProvider(PostFxEffect.ACES);
         if (provider == null) return false;
         provider.ApplyParams(_stack);
-        return provider.Render(_stack, _src, _dst);
+        return provider.Render(_src, _dst);
     }
 
     [Benchmark(Description = "Registry pass enumeration (all active)")]
@@ -198,7 +198,7 @@ public class PostStackBenchmarks
     {
         var provider = _registry.GetProvider(PostFxEffect.Bloom);
         if (provider == null) return false;
-        return provider.Render(_stack, _src, _dst);
+        return provider.Render(_src, _dst);
     }
 
     // ------------------------------------------------------------------
@@ -239,11 +239,11 @@ public class PostStackBenchmarks
         _stack.ValidateShaderVariants();
     }
 
-    [Benchmark(Description = "Pass registry re-bind owner")]
+    [Benchmark(Description = "Pass registry re-init owner")]
     public void RegistryRebindOwner()
     {
         var registry = PostFxPassRegistry.CreateDefault();
-        registry.BindOwner(_stack);
+        registry.Init(_stack);
     }
 }
 
