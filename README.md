@@ -78,3 +78,4 @@ PRs welcome. See `CONTRIBUTING.md` (Phenotype-org standard). New passes go throu
 ## License
 
 MIT — see [`LICENSE`](./LICENSE).
+<!-- ci-refresh: 2026-06-10T07:21:52Z -->
