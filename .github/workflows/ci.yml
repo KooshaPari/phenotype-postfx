@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
 permissions:
   contents: read
 
@@ -12,21 +13,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-
 jobs:
   validate:
     name: Validate Unity Package
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-
-      - name: Install just
-        uses: extractions/setup-just@e58aa0b6e0b20b844c98dc8b9c9c5a3a89ce1d2f # v3
-        with:
-          just-version: 1.36.0
 
       - name: Install .NET SDK
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
