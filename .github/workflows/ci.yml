@@ -99,5 +99,3 @@ jobs:
           fi
           echo ""
           echo "All referenced shader files present."
-
-<!-- ci-refresh: 2026-06-10T07:24:31Z -->
